@@ -1,0 +1,15 @@
+{
+  "name": "codex-spend",
+  "version": "1.0.0",
+  "description": "See where your OpenAI Codex tokens go. One command, zero setup.",
+  "main": "index.js",
+  "bin": {
+    "codex-spend": "./index.js"
+  },
+  "scripts": {
+    "start": "node index.js"
+  },
+  "keywords": ["openai", "codex", "tokens", "usage", "dashboard", "analytics"],
+  "license": "MIT",
+  "engines": { "node": ">=16" }
+}
