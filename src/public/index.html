@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Codex Spend</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
@@ -604,6 +605,10 @@
     <p class="hero-subtitle">See where your tokens actually go.</p>
   </div>
 
+  <div id="pricingWarning" class="privacy-notice animate" style="display:none; background: rgba(245,158,11,0.1); border-color: rgba(245,158,11,0.2); color: #B45309; margin-bottom: 30px;">
+    ⚠️ Some models have unknown pricing. Estimated costs may be lower than actual.
+  </div>
+
   <!-- Stats -->
   <div class="stats-row" id="statsRow"></div>
 
@@ -621,12 +626,13 @@
   <!-- Charts -->
   <div class="charts-grid animate delay-3">
     <div class="chart-card">
-      <h3 class="has-tooltip has-tooltip-below" style="display:inline-block">Tokens per Day<div class="tooltip">How many tokens you used each day. Indigo = fresh input + cache writes (full price), amber = cache reads (10x cheaper), teal = Claude's output.</div></h3>
+      <h3 class="has-tooltip has-tooltip-below" style="display:inline-block">Tokens per Day<div class="tooltip">How many tokens you used each day. Indigo = fresh input + cache writes (full price), amber = cache reads (10x cheaper), purple = reasoning logic, teal = Codex output.</div></h3>
       <canvas id="dailyChart"></canvas>
-      <div class="legend">
+      <div class="legend" style="flex-wrap:wrap">
         <div class="legend-item"><div class="legend-dot" style="background:var(--indigo)"></div> Fresh input (full price)</div>
-        <div class="legend-item"><div class="legend-dot" style="background:var(--amber)"></div> Cache reads (10x cheaper)</div>
-        <div class="legend-item"><div class="legend-dot" style="background:var(--teal)"></div> Claude's output</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--amber)"></div> Cache reads (cheaper)</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--purple)"></div> Reasoning</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--teal)"></div> Codex output</div>
       </div>
     </div>
     <div class="chart-card">
@@ -701,12 +707,13 @@
           <tr>
             <th data-sort="date">Date</th>
             <th data-sort="prompt">What you asked</th>
-            <th data-sort="model" class="has-tooltip has-tooltip-below">Model<div class="tooltip">Which AI model was used. Opus is the most capable (and uses more tokens), Sonnet is faster and lighter.</div></th>
-            <th data-sort="queries" style="text-align:right" class="has-tooltip has-tooltip-below">Messages<div class="tooltip">How many back-and-forth messages happened in this conversation, including automatic tool calls Claude made.</div></th>
-            <th data-sort="total" style="text-align:right" class="sorted has-tooltip has-tooltip-below">Total tokens<div class="tooltip">The total number of tokens used in this conversation. Higher means more expensive. Long conversations cost more because Claude re-reads everything each turn.</div></th>
-            <th data-sort="input" style="text-align:right" class="has-tooltip has-tooltip-below">Read<div class="tooltip">Tokens Claude read: your messages, the conversation history, files, and system context. This grows with each message because the full history gets re-sent.</div></th>
-            <th data-sort="reasoning" style="text-align:right" class="has-tooltip has-tooltip-below">Reasoning<div class="tooltip">Tokens Claude used specifically to "think" out loud before returning its final output to you.</div></th>
-            <th data-sort="output" style="text-align:right" class="has-tooltip has-tooltip-below">Written<div class="tooltip">Tokens Claude wrote back: responses, code, explanations. Usually a small fraction of the total.</div></th>
+            <th data-sort="model" class="has-tooltip has-tooltip-below">Model<div class="tooltip">Which AI model was used. OpenAI Codex models have different prices and capabilities.</div></th>
+            <th data-sort="reasoning_level" class="has-tooltip has-tooltip-below">Reasoning Level<div class="tooltip">The selected reasoning effort for this session (e.g. Low, Medium, High).</div></th>
+            <th data-sort="queries" style="text-align:right" class="has-tooltip has-tooltip-below">Messages<div class="tooltip">How many back-and-forth messages happened in this conversation, including automatic tool calls OpenAI Codex made.</div></th>
+            <th data-sort="total" style="text-align:right" class="sorted has-tooltip has-tooltip-below">Total tokens<div class="tooltip">The total number of tokens used in this conversation. Higher means more expensive. Long conversations cost more because Codex re-reads everything each turn.</div></th>
+            <th data-sort="input" style="text-align:right" class="has-tooltip has-tooltip-below">Read<div class="tooltip">Tokens Codex read: your messages, the conversation history, files, and system context. This grows with each message because the full history gets re-sent.</div></th>
+            <th data-sort="reasoning" style="text-align:right" class="has-tooltip has-tooltip-below">Reasoning<div class="tooltip">Tokens Codex used specifically to "think" out loud before returning its final output to you.</div></th>
+            <th data-sort="output" style="text-align:right" class="has-tooltip has-tooltip-below">Written<div class="tooltip">Tokens Codex wrote back: responses, code, explanations. Usually a small fraction of the total.</div></th>
           </tr>
         </thead>
         <tbody id="sessionsBody"></tbody>
@@ -724,6 +731,8 @@
 let DATA = null;
 let currentSort = { key: 'total', dir: 'desc' };
 let searchQuery = '';
+let dailyChartInstance = null;
+let modelChartInstance = null;
 
 function fmt(n) {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
@@ -783,8 +792,7 @@ function escapeHtml(s) {
 function formatDate(d) {
   if (!d) return '';
   const parts = d.split('-');
-  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  return `${months[parseInt(parts[1])-1]} ${parseInt(parts[2])}`;
+  return `${parts[2]} ${parts[1]} ${parts[0].slice(2)}`;
 }
 
 async function fetchData() {
@@ -834,6 +842,13 @@ async function refreshData(silent = false) {
 function render() {
   document.getElementById('loading').style.display = 'none';
   document.getElementById('app').style.display = 'block';
+  
+  if (DATA.totals && DATA.totals.hasUnknownPricing) {
+    document.getElementById('pricingWarning').style.display = 'flex';
+  } else {
+    document.getElementById('pricingWarning').style.display = 'none';
+  }
+  
   renderStats();
   renderInsights();
   renderDailyChart();
@@ -855,17 +870,23 @@ function renderStats() {
 
   const cards = [
     { label: 'Total Usage', value: fmt(t.totalTokens), sub: `${fmt(uncachedInput)} in + ${fmt(cacheTotal)} cache + ${fmt(t.totalOutputTokens)} out`,
-      tip: 'The total number of tokens used across all your conversations. Input = fresh context sent at full price. Cache = context reused from previous turns at lower cost. Output = what Claude wrote back.' },
-    { label: 'Est. Cost', value: '$' + (t.totalCost || 0).toFixed(2), sub: `Based on API GPT-4o prices`,
+      tip: 'The total number of tokens used across all your conversations. Input = fresh context sent at full price. Cache = context reused from previous turns at lower cost. Output = what the AI wrote back.' },
+    { label: 'Est. Cost', value: '$' + (t.totalCost || 0).toFixed(2), sub: `Based on API Codex prices`,
       tip: 'An estimate of what this usage would cost using standard API pricing.' },
     { label: 'Conversations', value: fmtFull(t.totalSessions), sub: `Each one used ~${fmt(t.avgTokensPerSession)} tokens on average`,
       tip: 'Each time you start OpenAI Codex and begin chatting, that counts as one conversation. A new conversation starts fresh with no prior context.' },
     { label: 'Messages Sent', value: fmtFull(t.totalQueries), sub: `Each message used ~${fmt(avgTokensPerMsg)} tokens on average`,
-      tip: 'Every time you hit Enter and send something to Claude, that is one message. This includes follow-up tool calls Claude makes automatically behind the scenes.' },
+      tip: 'Every time you hit Enter and send something to Codex, that is one message. This includes follow-up tool calls Codex makes automatically behind the scenes.' },
     { label: 'Reasoning Effort', value: fmt(t.totalReasoningTokens || 0), sub: `Tokens used for internal AI logic`,
       tip: 'The number of tokens the model used internally to "think" about your problem before emitting a response.' },
     { label: 'Cache Hit Rate', value: `${((t.cacheHitRate || 0) * 100).toFixed(0)}%`, sub: `${fmt(t.totalCacheReadTokens || 0)} tokens served from cache`,
       tip: 'The percentage of input tokens that were served from cache instead of being processed fresh. Higher is better -- cached tokens are cheaper and help you stay under rate limits.' },
+    { label: 'Cache Savings', value: '$' + (t.cacheSavings || 0).toFixed(2), sub: `Estimated API-equivalent savings`,
+      tip: 'How much money caching saved you compared to processing those tokens natively.' },
+    { label: 'Projected Monthly', value: '$' + (t.projectedMonthlyCost || 0).toFixed(2), sub: `Current Month: $${(t.costThisMonth || 0).toFixed(2)}`,
+      tip: 'Based on your usage this month, what you are projected to spend for the whole month.' },
+    { label: 'Week-over-week', value: (DATA.insights?.find(i => i.id === 'week-over-week')?.stat || 'N/A'), sub: `Change from last week`,
+      tip: 'How your usage compares to last week.' },
   ];
 
   document.getElementById('statsRow').innerHTML = cards.map((c, i) => `
@@ -906,152 +927,94 @@ function renderInsights() {
 // Daily chart -- 3 color stacked bars
 function renderDailyChart() {
   const canvas = document.getElementById('dailyChart');
-  const ctx = canvas.getContext('2d');
   const data = DATA.dailyUsage;
   if (!data.length) return;
+  canvas.style.height = '200px';
 
-  const dpr = window.devicePixelRatio || 1;
-  const w = canvas.parentElement.clientWidth - 48;
-  const h = 200;
-  canvas.width = w * dpr; canvas.height = h * dpr;
-  canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
-  ctx.scale(dpr, dpr);
-  ctx.clearRect(0, 0, w, h);
+  if (dailyChartInstance) { dailyChartInstance.destroy(); }
+  
+  const labels = data.map(d => formatDate(d.date));
+  const freshIn = data.map(d => Math.max(0, d.inputTokens - (d.cacheReadTokens || 0)));
+  const cacheRd = data.map(d => d.cacheReadTokens || 0);
+  const reasoning = data.map(d => d.reasoningTokens || 0);
+  const output = data.map(d => d.outputTokens || 0);
 
-  const maxTotal = Math.max(...data.map(d => d.totalTokens));
-  const barW = Math.max(8, Math.min(32, (w - 52) / data.length - 3));
-  const gap = 3;
-  const chartH = h - 36;
-  const startX = 48;
-
-  // Grid
-  ctx.font = '500 10px Inter, system-ui';
-  ctx.fillStyle = '#94A3B8';
-  ctx.textAlign = 'right';
-  for (let i = 0; i <= 4; i++) {
-    const val = (maxTotal / 4) * i;
-    const y = chartH - (chartH * i / 4) + 8;
-    ctx.fillText(fmt(val), startX - 10, y + 3);
-    ctx.strokeStyle = 'rgba(0,0,0,0.04)'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(startX, y); ctx.lineTo(w, y); ctx.stroke();
-  }
-
-  // Gradients
-  const inGrad = ctx.createLinearGradient(0, chartH + 8, 0, 0);
-  inGrad.addColorStop(0, '#818CF8'); inGrad.addColorStop(1, '#6366F1');
-  const cacheGrad = ctx.createLinearGradient(0, chartH + 8, 0, 0);
-  cacheGrad.addColorStop(0, '#FBBF24'); cacheGrad.addColorStop(1, '#F59E0B');
-  const outGrad = ctx.createLinearGradient(0, chartH + 8, 0, 0);
-  outGrad.addColorStop(0, '#2DD4BF'); outGrad.addColorStop(1, '#14B8A6');
-
-  data.forEach((d, i) => {
-    const x = startX + i * (barW + gap);
-    const baseY = chartH + 8;
-    const r = Math.min(4, barW / 2);
-
-    // Bottom: output (teal)
-    const outH = (d.outputTokens / maxTotal) * chartH;
-    if (outH > 0) {
-      ctx.fillStyle = outGrad;
-      ctx.beginPath(); roundedRect(ctx, x, baseY - outH, barW, outH, r); ctx.fill();
-    }
-
-    // Middle: cache reads (amber)
-    const cacheH = ((d.cacheReadTokens || 0) / maxTotal) * chartH;
-    if (cacheH > 0) {
-      ctx.fillStyle = cacheGrad;
-      ctx.beginPath(); roundedRect(ctx, x, baseY - outH - cacheH, barW, cacheH, 0); ctx.fill();
-    }
-
-    // Top: input + cache creation (indigo)
-    const freshH = ((d.inputTokens + (d.cacheCreationTokens || 0)) / maxTotal) * chartH;
-    if (freshH > 0) {
-      ctx.fillStyle = inGrad;
-      ctx.beginPath(); roundedRect(ctx, x, baseY - outH - cacheH - freshH, barW, freshH, r); ctx.fill();
+  dailyChartInstance = new Chart(canvas, {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [
+        { label: 'Output', data: output, backgroundColor: '#14B8A6', stack: 'Stack 0', borderRadius: { bottomLeft: 4, bottomRight: 4 } },
+        { label: 'Reasoning', data: reasoning, backgroundColor: '#A855F7', stack: 'Stack 0' },
+        { label: 'Cache Reads', data: cacheRd, backgroundColor: '#F59E0B', stack: 'Stack 0' },
+        { label: 'Fresh Input', data: freshIn, backgroundColor: '#6366F1', stack: 'Stack 0', borderRadius: { topLeft: 4, topRight: 4 } }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false } },
+      scales: { x: { stacked: true, grid: { display: false } }, y: { stacked: true, beginAtZero: true } }
     }
   });
-
-  // X labels
-  ctx.fillStyle = '#94A3B8'; ctx.textAlign = 'center';
-  ctx.font = '500 10px Inter, system-ui';
-  const step = Math.max(1, Math.floor(data.length / 7));
-  data.forEach((d, i) => {
-    if (i % step === 0 || i === data.length - 1) {
-      const x = startX + i * (barW + gap) + barW / 2;
-      ctx.fillText(formatDate(d.date), x, chartH + 24);
-    }
-  });
-}
-
-function roundedRect(ctx, x, y, w, h, r) {
-  if (h <= 0) return;
-  r = Math.min(r, h / 2, w / 2);
-  ctx.moveTo(x + r, y);
-  ctx.lineTo(x + w - r, y);
-  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-  ctx.lineTo(x + w, y + h - r);
-  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-  ctx.lineTo(x + r, y + h);
-  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-  ctx.lineTo(x, y + r);
-  ctx.quadraticCurveTo(x, y, x + r, y);
-  ctx.closePath();
 }
 
 // Model donut
 function renderModelChart() {
   const canvas = document.getElementById('modelChart');
-  const ctx = canvas.getContext('2d');
   const data = DATA.modelBreakdown;
   if (!data.length) return;
-
-  const dpr = window.devicePixelRatio || 1;
-  const size = Math.min(180, canvas.parentElement.clientWidth - 48);
-  canvas.width = size * dpr; canvas.height = size * dpr;
-  canvas.style.width = size + 'px'; canvas.style.height = size + 'px';
-  ctx.scale(dpr, dpr);
-
-  const cx = size/2, cy = size/2, r = size/2 - 6, innerR = r * 0.6;
-  const total = data.reduce((s, d) => s + d.totalTokens, 0);
-
-  const modelColors = { opus: ['#6366F1','#818CF8'], sonnet: ['#10B981','#34D399'], haiku: ['#F97316','#FB923C'] };
-  function getColors(m) {
-    for (const [k, c] of Object.entries(modelColors)) { if (m.includes(k)) return c; }
-    return ['#94A3B8','#CBD5E1'];
-  }
-
-  let angle = -Math.PI / 2;
+  canvas.style.height = '180px';
+  canvas.style.width = '180px';
+  
+  if (modelChartInstance) { modelChartInstance.destroy(); }
+  
   const slices = [...data].sort((a, b) => b.totalTokens - a.totalTokens);
-
-  slices.forEach(d => {
-    const sa = (d.totalTokens / total) * Math.PI * 2;
-    const [c1, c2] = getColors(d.model);
-    const grad = ctx.createConicGradient(angle, cx, cy);
-    grad.addColorStop(0, c1); grad.addColorStop(1, c2);
-
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, angle, angle + sa);
-    ctx.arc(cx, cy, innerR, angle + sa, angle, true);
-    ctx.closePath();
-    ctx.fillStyle = c1;
-    ctx.fill();
-
-    // Gap between slices
-    ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 2; ctx.stroke();
-    angle += sa;
+  const total = slices.reduce((s, d) => s + d.totalTokens, 0);
+  
+  const modelColors = { opus: '#6366F1', sonnet: '#10B981', haiku: '#F97316' };
+  const getColors = (m) => {
+    for (const [k, c] of Object.entries(modelColors)) { if (m.includes(k)) return c; }
+    return '#94A3B8';
+  };
+  
+  modelChartInstance = new Chart(canvas, {
+    type: 'doughnut',
+    data: {
+      labels: slices.map(d => modelShort(d.model)),
+      datasets: [{
+        data: slices.map(d => d.totalTokens),
+        backgroundColor: slices.map(d => getColors(d.model)),
+        borderWidth: 2,
+        borderColor: '#FFFFFF'
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: '60%',
+      plugins: { legend: { display: false } }
+    },
+    plugins: [{
+      id: 'centerText',
+      beforeDraw: function(chart) {
+        var width = chart.width, height = chart.height, ctx = chart.ctx;
+        ctx.restore();
+        var fontSize = (height / 120).toFixed(2);
+        ctx.font = "800 " + fontSize + "em Inter, system-ui";
+        ctx.textBaseline = "middle";
+        ctx.fillStyle = "#0F172A";
+        var text = fmt(total), textX = Math.round((width - ctx.measureText(text).width) / 2), textY = height / 2;
+        ctx.fillText(text, textX, textY);
+        ctx.save();
+      }
+    }]
   });
-
-  ctx.fillStyle = '#0F172A'; ctx.textAlign = 'center';
-  ctx.font = '800 17px Inter, system-ui';
-  ctx.fillText(fmt(total), cx, cy + 2);
-  ctx.font = '500 10px Inter, system-ui';
-  ctx.fillStyle = '#94A3B8';
-  ctx.fillText('total', cx, cy + 16);
-
+  
   document.getElementById('modelLegend').innerHTML = slices.map(d => {
     const pct = ((d.totalTokens / total) * 100).toFixed(1);
     return `<div class="legend-item">
-      <div class="legend-dot" style="background:${getColors(d.model)[0]}"></div>
+      <div class="legend-dot" style="background:${getColors(d.model)}"></div>
       <span><strong>${modelShort(d.model)}</strong> &ndash; ${fmt(d.totalTokens)} (${pct}%)</span>
     </div>`;
   }).join('');
@@ -1197,6 +1160,7 @@ function renderSessions() {
     date: (a, b) => (a.timestamp || '').localeCompare(b.timestamp || ''),
     prompt: (a, b) => a.firstPrompt.localeCompare(b.firstPrompt),
     model: (a, b) => a.model.localeCompare(b.model),
+    reasoning_level: (a, b) => (a.reasoningLevel || '').localeCompare(b.reasoningLevel || ''),
     queries: (a, b) => a.queryCount - b.queryCount,
     total: (a, b) => a.totalTokens - b.totalTokens,
     input: (a, b) => a.inputTokens - b.inputTokens,
@@ -1216,6 +1180,7 @@ function renderSessions() {
       </td>
       <td><div class="prompt-preview" title="${escapeHtml(s.firstPrompt)}">${escapeHtml(s.firstPrompt)}</div></td>
       <td><span class="model-badge ${modelClass(s.model)}"><span class="model-dot"></span>${modelShort(s.model)}</span></td>
+      <td><span style="font-size: 13px; font-weight: 500; text-transform: capitalize; color: var(--text-secondary);">${s.reasoningLevel === 'xhigh' ? 'Very High' : s.reasoningLevel || 'None'}</span></td>
       <td class="token-num">${s.queryCount}</td>
       <td class="token-num" style="font-weight:700">${fmt(s.totalTokens)}</td>
       <td class="token-num">${fmt(s.inputTokens)}</td>
@@ -1308,7 +1273,6 @@ setInterval(() => {
 }, 30000);
 
 fetchData();
-window.addEventListener('resize', () => { if (DATA) { renderDailyChart(); renderModelChart(); } });
 </script>
 </body>
 </html>
