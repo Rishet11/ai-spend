@@ -338,7 +338,7 @@
   .prompt-row:nth-child(3) .prompt-rank { background: var(--gradient-warm); color: white; }
   .prompt-text {
     font-size: 14px; font-weight: 500; line-height: 1.5;
-    display: -webkit-box; -webkit-line-clamp: 2;
+    display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2;
     -webkit-box-orient: vertical; overflow: hidden;
   }
   .prompt-meta { font-size: 12px; color: var(--text-tertiary); margin-top: 4px; font-weight: 500; }
@@ -387,7 +387,7 @@
   }
   .drawer-prompt-text {
     font-size: 13px; font-weight: 500; line-height: 1.5;
-    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
     word-break: break-word;
   }
   .drawer-prompt-meta { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin-top: 5px; }
@@ -455,14 +455,16 @@
   }
   .model-badge:focus-visible { outline: 2px solid var(--indigo); outline-offset: 2px; }
   /* Contrast-corrected badge colors (WCAG AA compliant) */
-  .model-opus { background: #EEF2FF; color: #3730A3; }
-  .model-sonnet { background: #ECFDF5; color: #047857; }
-  .model-haiku { background: #FFF7ED; color: #C2410C; }
+  .model-codex-5-3 { background: #EEF2FF; color: #3730A3; }
+  .model-codex-5-2 { background: #ECFDF5; color: #047857; }
+  .model-codex-max { background: #FFFBEB; color: #92400E; }
+  .model-codex-mini { background: #FDF2F8; color: #9D174D; }
   .model-unknown { background: #F1F5F9; color: #475569; }
   .model-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
-  .model-opus .model-dot { background: #4F46E5; }
-  .model-sonnet .model-dot { background: #10B981; }
-  .model-haiku .model-dot { background: #F97316; }
+  .model-codex-5-3 .model-dot { background: #4F46E5; }
+  .model-codex-5-2 .model-dot { background: #10B981; }
+  .model-codex-max .model-dot { background: #F59E0B; }
+  .model-codex-mini .model-dot { background: #EC4899; }
   /* Sub-line pills in project rows — compact variant */
   .model-pills {
     list-style: none; padding: 0; margin: 5px 0 0;
@@ -748,34 +750,25 @@ function fmt(n) {
 function fmtFull(n) { return n.toLocaleString(); }
 
 function modelClass(m) {
-  if (m.includes('opus')) return 'model-opus';
-  if (m.includes('sonnet')) return 'model-sonnet';
-  if (m.includes('haiku')) return 'model-haiku';
+  const norm = m.toLowerCase();
+  if (norm.includes('5.3')) return 'model-codex-5-3';
+  if (norm.includes('5.2')) return 'model-codex-5-2';
+  if (norm.includes('max')) return 'model-codex-max';
+  if (norm.includes('mini')) return 'model-codex-mini';
   return 'model-unknown';
 }
 function modelShort(m) {
-  // New format: codex-{family}-{major}-{minor}[-date]
-  // e.g. codex-opus-4-6, codex-sonnet-4-6, codex-haiku-4-5-20251001
-  let match = m.match(/^codex-(opus|sonnet|haiku)-(\d+)-(\d+)/i);
+  // e.g. gpt-5.3-codex -> GPT-5.3
+  // e.g. gpt-5.1-codex-max -> GPT-5.1 Max
+  // e.g. gpt-5.1-codex-mini -> GPT-5.1 Mini
+  const match = m.match(/gpt-(5\.\d)-codex(?:-(max|mini|spark))?/i);
   if (match) {
-    const name = match[1].charAt(0).toUpperCase() + match[1].slice(1);
-    return name + ' ' + match[2] + '.' + match[3];
+    let base = `GPT-${match[1]}`;
+    if (match[2]) {
+      base += ` ${match[2].charAt(0).toUpperCase() + match[2].slice(1)}`;
+    }
+    return base;
   }
-  // Old format with sub-version: codex-3-5-{family} or codex-3-7-{family}
-  match = m.match(/^codex-(\d+)-(\d+)-(opus|sonnet|haiku)/i);
-  if (match) {
-    const name = match[3].charAt(0).toUpperCase() + match[3].slice(1);
-    return name + ' ' + match[1] + '.' + match[2];
-  }
-  // Old format: codex-3-{family}
-  match = m.match(/^codex-(\d+)-(opus|sonnet|haiku)/i);
-  if (match) {
-    const name = match[2].charAt(0).toUpperCase() + match[2].slice(1);
-    return name + ' ' + match[1];
-  }
-  if (m.includes('opus')) return 'Opus';
-  if (m.includes('sonnet')) return 'Sonnet';
-  if (m.includes('haiku')) return 'Haiku';
   return m;
 }
 function projectShort(p) {
@@ -949,10 +942,10 @@ function renderDailyChart() {
     data: {
       labels: labels,
       datasets: [
-        { label: 'Output', data: output, backgroundColor: '#14B8A6', stack: 'Stack 0', borderRadius: { bottomLeft: 4, bottomRight: 4 } },
+        { label: 'Output', data: output, backgroundColor: '#14B8A6', stack: 'Stack 0', borderRadius: 4 },
         { label: 'Reasoning', data: reasoning, backgroundColor: '#A855F7', stack: 'Stack 0' },
         { label: 'Cache Reads', data: cacheRd, backgroundColor: '#F59E0B', stack: 'Stack 0' },
-        { label: 'Fresh Input', data: freshIn, backgroundColor: '#6366F1', stack: 'Stack 0', borderRadius: { topLeft: 4, topRight: 4 } }
+        { label: 'Fresh Input', data: freshIn, backgroundColor: '#6366F1', stack: 'Stack 0', borderRadius: 4 }
       ]
     },
     options: {
@@ -977,9 +970,9 @@ function renderModelChart() {
   const slices = [...data].sort((a, b) => b.totalTokens - a.totalTokens);
   const total = slices.reduce((s, d) => s + d.totalTokens, 0);
   
-  const modelColors = { opus: '#6366F1', sonnet: '#10B981', haiku: '#F97316' };
+  const modelColors = { '5.3': '#6366F1', '5.2': '#10B981', 'max': '#F59E0B', 'mini': '#EC4899' };
   const getColors = (m) => {
-    for (const [k, c] of Object.entries(modelColors)) { if (m.includes(k)) return c; }
+    for (const [k, c] of Object.entries(modelColors)) { if (m.toLowerCase().includes(k)) return c; }
     return '#94A3B8';
   };
   
