@@ -9,7 +9,20 @@
   "scripts": {
     "start": "node index.js"
   },
-  "keywords": ["openai", "codex", "tokens", "usage", "dashboard", "analytics"],
+  "keywords": [
+    "openai",
+    "codex",
+    "tokens",
+    "usage",
+    "dashboard",
+    "analytics"
+  ],
   "license": "MIT",
-  "engines": { "node": ">=16" }
+  "engines": {
+    "node": ">=16"
+  },
+  "dependencies": {
+    "express": "^5.2.1",
+    "open": "^11.0.0"
+  }
 }
