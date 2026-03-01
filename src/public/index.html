@@ -950,7 +950,7 @@ function renderDailyChart() {
 
   if (dailyChartInstance) { dailyChartInstance.destroy(); }
   
-  const labels = data.map(d => d.date);
+  const labels = data.map(d => formatDate(d.date));
   const freshIn = data.map(d => Math.max(0, d.inputTokens - (d.cacheReadTokens || 0)));
   const cacheRd = data.map(d => d.cacheReadTokens || 0);
   const reasoning = data.map(d => d.reasoningTokens || 0);
@@ -979,7 +979,6 @@ function renderDailyChart() {
           bodyFont: { family: 'Geist', size: 13 },
           titleFont: { family: 'Geist', size: 14 },
           callbacks: {
-            title: function(context) { return formatDate(context[0].label.split(',')[0]); },
             label: function(context) { return context.dataset.label + ': ' + fmt(context.parsed.y); }
           }
         }
@@ -987,8 +986,6 @@ function renderDailyChart() {
       scales: {
         x: { 
           stacked: true, 
-          type: 'time',
-          time: { unit: 'day', tooltipFormat: 'yyyy-MM-dd' },
           grid: { display: false }, 
           ticks: { font: { family: 'Geist', size: 12 }, color: '#64748B', maxRotation: 0, autoSkip: true, maxTicksLimit: 8 },
           border: { display: false }
