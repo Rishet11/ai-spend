@@ -749,7 +749,105 @@ function generateInsights(sessions, allPrompts, totals) {
     }
   }
 
+  // 8. The "One-Word Reply" Trap
+  const tinyPrompts = allQueries.filter(q => q.userPrompt && wordCount(q.userPrompt) < 3 && q.inputTokens > 100000);
+  if (tinyPrompts.length > 3) {
+    const wastedCost = tinyPrompts.reduce((sum, q) => sum + calculateCost(q.model, q.inputTokens, 0, 0, 0), 0);
+    insights.push({
+      id: 'one-word-reply',
+      type: 'warning',
+      title: `The "One-Word Reply" Trap (wasted ~$${wastedCost.toFixed(2)})`,
+      description: `In ${tinyPrompts.length} recent queries, you replied with less than 3 words (like "${tinyPrompts[0].userPrompt}"), which forced Codex to re-read a massive context history of over 100k tokens each time.`,
+      action: `Try to batch your feedback into a single descriptive message instead of rapid-fire short replies.`,
+    });
+  }
 
+  // 9. Model Downgrade Opportunity
+  const overpaidSessions = sessions.filter(s => s.model.includes('gpt-5.3-codex') && s.queryCount <= 2 && s.outputTokens < 300);
+  if (overpaidSessions.length > 5) {
+    let savings = 0;
+    overpaidSessions.forEach(s => {
+      const gpt53Cost = s.totalCost;
+      const gpt51Cost = s.queries.reduce((sum, q) => sum + calculateCost('gpt-5.1-codex-mini', q.inputTokens, q.cachedTokens, q.outputTokens, q.reasoningTokens), 0);
+      savings += (gpt53Cost - gpt51Cost);
+    });
+    if (savings > 1) {
+      insights.push({
+        id: 'model-downgrade',
+        type: 'info',
+        title: `Model Downgrade Opportunity (save ~$${savings.toFixed(2)})`,
+        description: `We noticed ${overpaidSessions.length} very short sessions using the premium \`gpt-5.3-codex\` model where you only generated a few lines of output.`,
+        action: `For simple questions or quick formatting tasks, explicitly select \`gpt-5.1-codex-mini\`. It will give you the exact same result for a fraction of the cost.`,
+      });
+    }
+  }
+
+  // 10. The Tool Loop Warning (Infinite Loops)
+  const heavyToolQueries = allQueries.filter(q => q.continuations > 10);
+  if (heavyToolQueries.length > 0) {
+    const worstToolQuery = heavyToolQueries.sort((a,b) => b.continuations - a.continuations)[0];
+    const toolCost = calculateCost(worstToolQuery.model, worstToolQuery.inputTokens, worstToolQuery.cachedTokens, worstToolQuery.outputTokens, worstToolQuery.reasoningTokens);
+    insights.push({
+      id: 'tool-loop-warning',
+      type: 'warning',
+      title: `Codex is struggling to find what it needs (costing ~$${toolCost.toFixed(2)})`,
+      description: `In a recent prompt ("${worstToolQuery.userPrompt.substring(0, 30)}..."), Codex had to use internal background tools ${worstToolQuery.continuations} times before replying.`,
+      action: `This usually means your request was too vague or the workspace is too large. Try pointing the AI directly to the relevant file paths in your prompt.`,
+    });
+  }
+
+  // 11. Micro-Tasking with Heavy Baggage
+  const microSessions = sessions.filter(s => s.queryCount === 1 && s.queries[0].inputTokens > 50000 && parseFloat(s.duration) < 2);
+  if (microSessions.length > 5) {
+    const microCost = microSessions.reduce((sum, s) => sum + s.totalCost, 0);
+    insights.push({
+      id: 'micro-tasking',
+      type: 'warning',
+      title: `You are carrying heavy luggage for short trips (wasted ~$${microCost.toFixed(2)})`,
+      description: `You started ${microSessions.length} new conversations recently for a single quick question, but your IDE sent over massive background context payloads each time.`,
+      action: `Close unused tabs before asking quick, one-off questions to drastically reduce your baseline token cost.`,
+    });
+  }
+
+  // 12. Weekend Warrior
+  if (totals.totalTokens > 0 && sessions.length > 5) {
+    let weekendTokens = 0;
+    let weekendCost = 0;
+    sessions.forEach(s => {
+      const ts = s.createdAt || s.updatedAt;
+      if (ts) {
+        const dt = new Date(ts);
+        const day = dt.getDay(); // 0 is Sunday, 6 is Saturday
+        if (day === 0 || day === 6) {
+          weekendTokens += s.totalTokens;
+          weekendCost += s.totalCost;
+        }
+      }
+    });
+    const weekendPct = (weekendTokens / totals.totalTokens) * 100;
+    if (weekendPct > 30) {
+      insights.push({
+        id: 'weekend-warrior',
+        type: 'info',
+        title: `You’re a Weekend Warrior! (${weekendPct.toFixed(0)}% weekend usage / $${weekendCost.toFixed(2)})`,
+        description: `Over ${weekendPct.toFixed(0)}% of your token spend ($${weekendCost.toFixed(2)}) happened on Saturday or Sunday.`,
+        action: `Make sure to take breaks! Continuous coding without rest can lead to burnout and less efficient prompting.`,
+      });
+    }
+  }
+
+  // 13. The "Abandoned Context" Waste
+  const abandonedSessions = sessions.filter(s => s.queryCount === 1 && s.queries[0].inputTokens > 80000 && (!s.queries[0].outputTokens || s.queries[0].outputTokens < 50));
+  if (abandonedSessions.length > 3) {
+    const abndnCost = abandonedSessions.reduce((sum, s) => sum + s.totalCost, 0);
+    insights.push({
+      id: 'abandoned-context',
+      type: 'warning',
+      title: `You loaded the entire codebase but never followed up (wasted ~$${abndnCost.toFixed(2)})`,
+      description: `You have ${abandonedSessions.length} recent sessions where you initialized a massive context window but abandoned the chat almost immediately after the first reply.`,
+      action: `Be mindful of starting heavy sessions you don't intend to finish. It costs money just to initialize the context window!`,
+    });
+  }
 
   return insights;
 }
