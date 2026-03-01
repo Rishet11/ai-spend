@@ -578,11 +578,15 @@ function generateInsights(sessions, allPrompts, totals) {
     if (growthData.length > 0) {
       const avgGrowth = (growthData.reduce((s, g) => s + g.ratio, 0) / growthData.length).toFixed(1);
       const worstSession = growthData.sort((a, b) => b.ratio - a.ratio)[0];
+      
+      const first5Cost = worstSession.session.queries.slice(0, 5).reduce((sum, q) => sum + calculateCost(q.model, q.inputTokens, q.cachedTokens, q.outputTokens, q.reasoningTokens), 0) / Math.min(5, worstSession.session.queries.length);
+      const last5Cost = worstSession.session.queries.slice(-5).reduce((sum, q) => sum + calculateCost(q.model, q.inputTokens, q.cachedTokens, q.outputTokens, q.reasoningTokens), 0) / Math.min(5, worstSession.session.queries.length);
+
       insights.push({
         id: 'context-growth',
         type: 'warning',
-        title: 'The longer you chat, the more each message costs',
-        description: `In ${growthData.length} of your conversations, the messages near the end cost ${avgGrowth}x more than the ones at the start. Why? Every time you send a message, Codex re-reads the entire conversation from the beginning. So message #5 is cheap, but message #80 is expensive because Codex is re-reading 79 previous messages plus all the code it wrote. Your longest conversation ("${worstSession.session.firstPrompt.substring(0, 50)}...") grew ${worstSession.ratio.toFixed(1)}x more expensive by the end.`,
+        title: `The longer you chat, the more each message costs (grew to $${last5Cost.toFixed(2)}/msg)`,
+        description: `In ${growthData.length} of your conversations, the messages near the end cost ${avgGrowth}x more than the ones at the start. Why? Every time you send a message, Codex re-reads the entire conversation from the beginning. So message #5 is cheap, but message #80 is expensive because Codex is re-reading 79 previous messages plus all the code it wrote. Your longest conversation ("${worstSession.session.firstPrompt.substring(0, 50)}...") grew to $${last5Cost.toFixed(2)} per message by the end, compared to $${first5Cost.toFixed(2)} at the start.`,
         action: 'Start a fresh conversation when you move to a new task. If you need context from before, paste a short summary in your first message. This gives Codex a clean slate instead of re-reading hundreds of old messages.',
       });
     }
@@ -595,10 +599,11 @@ function generateInsights(sessions, allPrompts, totals) {
     if (heavyWriters.length > 0) {
       const worst = heavyWriters.sort((a,b) => (b.outputTokens/b.queryCount) - (a.outputTokens/a.queryCount))[0];
       const avgOutput = Math.round(worst.outputTokens / worst.queryCount);
+      const estCostPerTurn = (worst.totalCost / worst.queryCount);
       insights.push({
         id: 'output-optimization',
         type: 'warning',
-        title: `Codex is rewriting entire files (${fmt(avgOutput)} output tokens per turn)`,
+        title: `Codex is rewriting entire files (${fmt(avgOutput)} output tokens / ~$${estCostPerTurn.toFixed(2)} per turn)`,
         description: `In the session "${worst.firstPrompt.substring(0, 50)}...", Codex averaged ${fmt(avgOutput)} output tokens every time it replied. This usually means it is rewriting massive files from scratch just to change one or two lines, which drains your budget quickly.`,
         action: `Add a system rule like: "Only return the functions you changed, do not rewrite the entire file." This keeps the output tokens strictly focused on edits.`,
       });
@@ -673,10 +678,11 @@ function generateInsights(sessions, allPrompts, totals) {
     
     if (lowROIPrompts.length > 5) {
       const wastedTokens = lowROIPrompts.reduce((sum, q) => sum + q.reasoningTokens, 0);
+      const wastedCost = lowROIPrompts.reduce((sum, q) => sum + calculateCost(q.model, 0, 0, 0, q.reasoningTokens), 0);
       insights.push({
         id: 'reasoning-roi',
         type: 'warning',
-        title: `Low ROI on "High" Reasoning Effort (${fmt(wastedTokens)} tokens)`,
+        title: `Low ROI on "High" Reasoning Effort (${fmt(wastedTokens)} tokens / wasted $${wastedCost.toFixed(2)})`,
         description: `You have ${lowROIPrompts.length} recent prompts that were very short (under 20 words) but generated over 2,000 hidden reasoning tokens each while using high or very high reasoning effort. For example, asking "${lowROIPrompts[0].userPrompt.substring(0, 30)}..." burned massive reasoning tokens. High reasoning effort is charged as output tokens and gets expensive quickly.`,
         action: `Switch Codex to "Low" reasoning effort for quick formatting requests, simple questions, or small targeted edits. Only use "High" effort for complex architectural design or tough bug fixing.`,
       });
@@ -687,11 +693,12 @@ function generateInsights(sessions, allPrompts, totals) {
   const massiveBaselines = sessions.filter(s => s.queries && s.queries.length > 0 && s.queries[0].inputTokens > 50000);
   if (massiveBaselines.length > 3) {
     const avgStart = Math.round(massiveBaselines.reduce((sum, s) => sum + s.queries[0].inputTokens, 0) / massiveBaselines.length);
+    const avgCost = massiveBaselines.reduce((sum, s) => sum + calculateCost(s.queries[0].model, s.queries[0].inputTokens, 0, 0, 0), 0) / massiveBaselines.length;
     insights.push({
       id: 'tab-hoarder',
       type: 'warning',
-      title: `You might be a Tab Hoarder (Avg Start: ${fmt(avgStart)} tokens)`,
-      description: `In ${massiveBaselines.length} recent conversations, your very first message sent over ${fmt(avgStart)} input tokens to Codex. This usually happens when you have dozens of files open in your IDE, so Codex is forced to read all of them every time you ask a question.`,
+      title: `You might be a Tab Hoarder (Avg Start: ${fmt(avgStart)} tokens / ~$${avgCost.toFixed(2)})`,
+      description: `In ${massiveBaselines.length} recent conversations, your very first message sent over ${fmt(avgStart)} input tokens to Codex. This usually happens when you have dozens of files open in your IDE, so Codex is forced to read all of them every time you ask a question. Charging you roughly $${avgCost.toFixed(2)} just to say hello.`,
       action: `Close unused files and tabs before starting a new conversation. This dramatically reduces your base input token cost and speeds up Codex's response time by giving it less noise to sift through.`,
     });
   }
