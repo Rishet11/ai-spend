@@ -622,7 +622,7 @@ function generateInsights(sessions, allPrompts, totals) {
     if (heavyWriters.length > 0) {
       const worst = heavyWriters.sort((a,b) => (b.outputTokens/b.queryCount) - (a.outputTokens/a.queryCount))[0];
       const avgOutput = Math.round(worst.outputTokens / worst.queryCount);
-      const estCostPerTurn = (worst.totalCost / worst.queryCount);
+      const estCostPerTurn = (worst.cost / worst.queryCount);
       insights.push({
         id: 'output-optimization',
         type: 'warning',
@@ -638,7 +638,7 @@ function generateInsights(sessions, allPrompts, totals) {
   if (sessionsWithDuration.length > 0) {
     let topBurners = sessionsWithDuration.map(s => {
       const mins = parseFloat(s.duration);
-      return { session: s, burnRate: Math.round(s.totalTokens / mins), costRate: s.totalCost / mins };
+      return { session: s, burnRate: Math.round(s.totalTokens / mins), costRate: s.cost / mins };
     }).sort((a, b) => b.burnRate - a.burnRate);
     
     // Only show if the burn rate is actually somewhat high (>10k per minute)
@@ -706,7 +706,7 @@ function generateInsights(sessions, allPrompts, totals) {
         id: 'reasoning-roi',
         type: 'warning',
         title: `Low ROI on "High" Reasoning Effort (${fmt(wastedTokens)} tokens / wasted $${wastedCost.toFixed(2)})`,
-        description: `You have ${lowROIPrompts.length} recent prompts that were very short (under 20 words) but generated over 2,000 hidden reasoning tokens each while using high or very high reasoning effort. For example, asking "${lowROIPrompts[0].userPrompt.substring(0, 30)}..." burned massive reasoning tokens. High reasoning effort is charged as output tokens and gets expensive quickly.`,
+        description: `You have ${lowROIPrompts.length} recent prompts that were very short (under 20 words) but generated over 2,000 hidden reasoning tokens each. For example, asking "${lowROIPrompts[0].userPrompt.substring(0, 30)}..." burned massive reasoning tokens. While it only cost $${wastedCost.toFixed(2)} here, this habit will scale up to drain your wallet over hundreds of queries. High reasoning effort is charged as expensive output tokens.`,
         action: `Switch Codex to "Low" reasoning effort for quick formatting requests, simple questions, or small targeted edits. Only use "High" effort for complex architectural design or tough bug fixing.`,
       });
     }
@@ -717,11 +717,12 @@ function generateInsights(sessions, allPrompts, totals) {
   if (massiveBaselines.length > 3) {
     const avgStart = Math.round(massiveBaselines.reduce((sum, s) => sum + s.queries[0].inputTokens, 0) / massiveBaselines.length);
     const avgCost = massiveBaselines.reduce((sum, s) => sum + calculateCost(s.queries[0].model, s.queries[0].inputTokens, 0, 0, 0), 0) / massiveBaselines.length;
+    const totalWasted = avgCost * massiveBaselines.length;
     insights.push({
       id: 'tab-hoarder',
       type: 'warning',
-      title: `You might be a Tab Hoarder (Avg Start: ${fmt(avgStart)} tokens / ~$${avgCost.toFixed(2)})`,
-      description: `In ${massiveBaselines.length} recent conversations, your very first message sent over ${fmt(avgStart)} input tokens to Codex. This usually happens when you have dozens of files open in your IDE, so Codex is forced to read all of them every time you ask a question. Charging you roughly $${avgCost.toFixed(2)} just to say hello.`,
+      title: `You might be a Tab Hoarder (Cost you ~$${totalWasted.toFixed(2)} across ${massiveBaselines.length} sessions)`,
+      description: `In ${massiveBaselines.length} recent conversations, your very first message sent over ${fmt(avgStart)} input tokens to Codex. This usually happens when you have dozens of unrelated files open in your IDE. Codex is forced to read all of them every time you ask a question. Charging ~$${avgCost.toFixed(2)} per session just to say hello quietly adds up ($${totalWasted.toFixed(2)} total here).`,
       action: `Close unused files and tabs before starting a new conversation. This dramatically reduces your base input token cost and speeds up Codex's response time by giving it less noise to sift through.`,
     });
   }
@@ -753,7 +754,7 @@ function generateInsights(sessions, allPrompts, totals) {
         totalTimeTokens += s.totalTokens;
         if (hour >= 22 || hour < 4) { // 10 PM to 4 AM
           lateNightTokens += s.totalTokens;
-          lateNightCost += s.totalCost;
+          lateNightCost += s.cost;
         }
       }
     });
@@ -790,7 +791,7 @@ function generateInsights(sessions, allPrompts, totals) {
   if (overpaidSessions.length > 5) {
     let savings = 0;
     overpaidSessions.forEach(s => {
-      const gpt53Cost = s.totalCost;
+      const gpt53Cost = s.cost;
       const gpt51Cost = s.queries.reduce((sum, q) => sum + calculateCost('gpt-5.1-codex-mini', q.inputTokens, q.cachedTokens, q.outputTokens, q.reasoningTokens), 0);
       savings += (gpt53Cost - gpt51Cost);
     });
