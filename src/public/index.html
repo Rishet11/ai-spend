@@ -1260,13 +1260,29 @@ document.getElementById('searchInput').addEventListener('input', e => {
 });
 
 // Drill-down
-function openDrilldown(sessionId) {
+async function openDrilldown(sessionId) {
   const session = DATA.sessions.find(s => s.sessionId === sessionId);
   if (!session) return;
 
   document.getElementById('drilldownTitle').textContent = session.firstPrompt.substring(0, 140);
   document.getElementById('drilldownMeta').textContent =
     `${formatDate(session.date)} \u00B7 ${modelShort(session.model)} \u00B7 ${session.queryCount} messages \u00B7 ${fmt(session.totalTokens)} tokens`;
+
+  const panel = document.getElementById('drilldown');
+  panel.classList.add('open');
+  panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  if (!session.queries || session.queries.length === 0) {
+    document.getElementById('queryList').innerHTML = '<div style="padding: 20px; text-align: center; color: var(--text-tertiary);">Loading complete session history...</div>';
+    try {
+      const res = await fetch('/api/session/' + sessionId);
+      const fullSession = await res.json();
+      session.queries = fullSession.queries || [];
+    } catch(e) {
+      document.getElementById('queryList').innerHTML = '<div style="padding: 20px; text-align: center; color: red;">Failed to load session history.</div>';
+      return;
+    }
+  }
 
   const grouped = [];
   let current = null;
@@ -1307,10 +1323,6 @@ function openDrilldown(sessionId) {
       </div>
     </div>`;
   }).join('');
-
-  const panel = document.getElementById('drilldown');
-  panel.classList.add('open');
-  panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function closeDrilldown() {

@@ -35,8 +35,26 @@ function getCodexDir() {
   return path.join(os.homedir(), '.codex');
 }
 
+function getLatestStateDb() {
+  const codexDir = getCodexDir();
+  let latest = 5;
+  try {
+    if (fs.existsSync(codexDir)) {
+      const files = fs.readdirSync(codexDir);
+      for (const f of files) {
+        const match = f.match(/^state_(\d+)\.sqlite$/);
+        if (match) {
+          const num = parseInt(match[1], 10);
+          if (num > latest) latest = num;
+        }
+      }
+    }
+  } catch(e) {}
+  return path.join(codexDir, `state_${latest}.sqlite`);
+}
+
 function q(sql) {
-  const dbPath = path.join(getCodexDir(), 'state_5.sqlite');
+  const dbPath = getLatestStateDb();
   try {
     const r = spawnSync("sqlite3", ["-json", dbPath, sql], { encoding: "utf8" });
     if (r.error || r.status !== 0) return []; // Gracefully handle if sqlite3 is missing or fails
@@ -45,22 +63,6 @@ function q(sql) {
   } catch (e) {
     return [];
   }
-}
-
-async function parseJSONLFile(filePath) {
-  const lines = [];
-  const stream = fs.createReadStream(filePath, { encoding: 'utf-8' });
-  const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
-
-  for await (const line of rl) {
-    if (!line.trim()) continue;
-    try {
-      lines.push(JSON.parse(line));
-    } catch {
-      // Skip malformed lines
-    }
-  }
-  return lines;
 }
 
 // Codex IDEs often inject massive context blocks before the actual user prompt
@@ -106,8 +108,11 @@ function wordCount(text) {
   return words.length;
 }
 
-function extractSessionData(entries) {
+async function parseSessionStream(filePath) {
   const queries = [];
+  const stream = fs.createReadStream(filePath, { encoding: 'utf-8' });
+  const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
+
   let pendingPrompt = null;
   let continuations = 0;
   let maxRequestInputForPrompt = 0;
@@ -128,7 +133,15 @@ function extractSessionData(entries) {
   let lastSeenInput = 0;
   let lastSeenOutput = 0;
 
-  for (const row of entries) {
+  for await (const line of rl) {
+    if (!line.trim()) continue;
+    let row;
+    try {
+      row = JSON.parse(line);
+    } catch {
+      continue;
+    }
+
     if (row.type === "turn_context" && row.payload?.model) {
       currentModel = row.payload.model;
     }
@@ -254,11 +267,13 @@ async function parseAllSessions() {
   const modelMap = {};
   const allPrompts = [];
 
-  for (const t of threads) {
-    if (!t.rollout_path || !fs.existsSync(t.rollout_path)) continue;
-    
-    const entries = await parseJSONLFile(t.rollout_path);
-    const queries = extractSessionData(entries);
+  const validThreads = threads.filter(t => t.rollout_path && fs.existsSync(t.rollout_path));
+  
+  // Process in concurrent chunks of 10 to avoid EMFILE and sequential chokepoint
+  for (let i = 0; i < validThreads.length; i += 10) {
+    const chunk = validThreads.slice(i, i + 10);
+    await Promise.all(chunk.map(async (t) => {
+      const queries = await parseSessionStream(t.rollout_path);
     
 
     const totalCacheRead = queries.reduce((sum, q) => sum + (q.cachedTokens || 0), 0);
@@ -369,6 +384,7 @@ async function parseAllSessions() {
             });
         }
     }
+    }));
   }
 
   const dailyUsage = Object.values(dailyMap).sort((a, b) => a.date.localeCompare(b.date));
