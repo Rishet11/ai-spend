@@ -696,7 +696,7 @@ function generateInsights(sessions, allPrompts, totals) {
   if (highReasoningQueries.length > 0) {
     // Find queries where prompt is very short but reasoning is very high
     const lowROIPrompts = highReasoningQueries.filter(q => 
-      q.userPrompt && wordCount(q.userPrompt) < 20 && q.reasoningTokens > 2000
+      q.userPrompt && !q.userPrompt.includes('<image>') && wordCount(q.userPrompt) < 20 && q.reasoningTokens > 2000
     );
     
     if (lowROIPrompts.length > 5) {
@@ -774,7 +774,7 @@ function generateInsights(sessions, allPrompts, totals) {
   }
 
   // 8. The "One-Word Reply" Trap
-  const tinyPrompts = allQueries.filter(q => q.userPrompt && wordCount(q.userPrompt) < 3 && q.inputTokens > 100000);
+  const tinyPrompts = allQueries.filter(q => q.userPrompt && !q.userPrompt.includes('<image>') && wordCount(q.userPrompt) < 3 && q.inputTokens > 100000);
   if (tinyPrompts.length > 3) {
     const wastedCost = tinyPrompts.reduce((sum, q) => sum + calculateCost(q.model, q.inputTokens, 0, 0, 0), 0);
     insights.push({
