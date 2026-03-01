@@ -387,29 +387,7 @@ async function parseAllSessions() {
     }));
   }
 
-  let dailyUsage = Object.values(dailyMap).sort((a, b) => a.date.localeCompare(b.date));
-  
-  if (dailyUsage.length > 0) {
-    const minStr = dailyUsage[0].date;
-    const maxStr = dailyUsage[dailyUsage.length - 1].date;
-    const partsMin = minStr.split('-');
-    const minDate = new Date(partsMin[0], partsMin[1] - 1, partsMin[2]);
-    const partsMax = maxStr.split('-');
-    const maxDate = new Date(partsMax[0], partsMax[1] - 1, partsMax[2]);
-    
-    const paddedUsage = [];
-    for (let d = new Date(minDate); d <= maxDate; d.setDate(d.getDate() + 1)) {
-        const yyyy = d.getFullYear();
-        const mm = String(d.getMonth() + 1).padStart(2, '0');
-        const dd = String(d.getDate()).padStart(2, '0');
-        const dateStr = `${yyyy}-${mm}-${dd}`;
-        paddedUsage.push(dailyMap[dateStr] || { 
-            date: dateStr, 
-            inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, reasoningTokens: 0, totalTokens: 0, cost: 0, queries: 0 
-        });
-    }
-    dailyUsage = paddedUsage;
-  }
+  const dailyUsage = Object.values(dailyMap).sort((a, b) => a.date.localeCompare(b.date));
   const modelBreakdown = Object.values(modelMap);
   
   allPrompts.sort((a, b) => b.totalTokens - a.totalTokens);
