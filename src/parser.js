@@ -387,7 +387,13 @@ async function parseAllSessions() {
     }));
   }
 
-  const dailyUsage = Object.values(dailyMap).sort((a, b) => a.date.localeCompare(b.date));
+  let dailyUsage = Object.values(dailyMap).sort((a, b) => a.date.localeCompare(b.date));
+  
+  // Filter to last 30 days of usage maximum for the chart
+  if (dailyUsage.length > 30) {
+    dailyUsage = dailyUsage.slice(-30);
+  }
+
   const modelBreakdown = Object.values(modelMap);
   
   allPrompts.sort((a, b) => b.totalTokens - a.totalTokens);
