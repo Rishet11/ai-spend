@@ -585,7 +585,7 @@ function generateInsights(sessions, allPrompts, totals) {
       insights.push({
         id: 'context-growth',
         type: 'warning',
-        title: `The longer you chat, the more each message costs (grew to $${last5Cost.toFixed(2)}/msg)`,
+        title: `The longer you chat, the more each message costs ($${first5Cost.toFixed(2)} grew to $${last5Cost.toFixed(2)}/msg)`,
         description: `In ${growthData.length} of your conversations, the messages near the end cost ${avgGrowth}x more than the ones at the start. Why? Every time you send a message, Codex re-reads the entire conversation from the beginning. So message #5 is cheap, but message #80 is expensive because Codex is re-reading 79 previous messages plus all the code it wrote. Your longest conversation ("${worstSession.session.firstPrompt.substring(0, 50)}...") grew to $${last5Cost.toFixed(2)} per message by the end, compared to $${first5Cost.toFixed(2)} at the start.`,
         action: 'Start a fresh conversation when you move to a new task. If you need context from before, paste a short summary in your first message. This gives Codex a clean slate instead of re-reading hundreds of old messages.',
       });
