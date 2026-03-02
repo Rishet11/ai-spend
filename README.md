@@ -1,10 +1,12 @@
 # 💸 codex-spend
 
+<p align="center">
+  <img src="src/public/logo.png" width="120" height="120" alt="codex-spend logo">
+</p>
+
 **See where your OpenAI Codex tokens go. One command.**
 
 `codex-spend` is a local dashboard for analyzing OpenAI Codex CLI usage. It parses your local Codex session/state data and visualizes token usage, estimated cost, and patterns that can help reduce spend.
-
-![Codex Spend Dashboard Preview](https://github.com/user-attachments/assets/746d88ae-4f24-42f1-9457-3f33de8e8c89)
 
 ---
 
@@ -64,7 +66,7 @@ The dashboard uses estimated cost calculations based on OpenAI API per-token pri
 
 ## 📝 License
 
-MIT
+Distributed under the MIT License. See `LICENSE` for more information.
 
 ---
 

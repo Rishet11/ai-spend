@@ -53,9 +53,14 @@ const server = app.listen(port, '127.0.0.1', async () => {
     const data = await parseAllSessions();
     if (data && data.sessions && data.sessions.length > 0) {
       console.log('');
-      console.log('==========================================================================================================================');
-      console.log('       💰 Codex Spend Summary (Recent Sessions)');
-      console.log('==========================================================================================================================');
+      console.log(' \x1b[38;2;0;113;227m  ____             _             \x1b[0m');
+      console.log(' \x1b[38;2;0;113;227m / ___|  ___   __| |  ___ __  __\x1b[0m');
+      console.log(' \x1b[38;2;0;113;227m| |     / _ \\ / _` | / _ \\\\ \\/ /\x1b[0m');
+      console.log(' \x1b[38;2;0;113;227m| |___ | (_) | (_| ||  __/ >  < \x1b[0m');
+      console.log(' \x1b[38;2;0;113;227m \\____| \\___/ \\__,_| \\___|/_/\\_\\\x1b[0m   \x1b[38;2;50;173;230m- spend\x1b[0m');
+      console.log('');
+      console.log(' \x1b[37mSee where your OpenAI Codex tokens go. One command.\x1b[0m');
+      console.log('');
       
       const colTitle = 28;
       const colDate = 10;
