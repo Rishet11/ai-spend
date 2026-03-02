@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>codex-spend | OpenAI Codex Analytics Dashboard</title>
+    <link rel="icon" type="image/png" href="logo.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #030712;
+            --accent: #0071E3;
+            --accent-glow: rgba(0, 113, 227, 0.4);
+            --text: #F9FAFB;
+            --text-muted: #9CA3AF;
+            --glass: rgba(255, 255, 255, 0.03);
+            --glass-border: rgba(255, 255, 255, 0.08);
+            --font-main: 'Outfit', sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text);
+            font-family: var(--font-main);
+            overflow-x: hidden;
+            line-height: 1.6;
+        }
+
+        /* Ambient Background Shadows */
+        .ambient {
+            position: fixed;
+            width: 60vw;
+            height: 60vw;
+            background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
+            top: -20vw;
+            right: -20vw;
+            z-index: -1;
+            filter: blur(80px);
+            opacity: 0.5;
+        }
+
+        .ambient-2 {
+            position: fixed;
+            width: 50vw;
+            height: 50vw;
+            background: radial-gradient(circle, rgba(88, 86, 214, 0.2) 0%, transparent 70%);
+            bottom: -15vw;
+            left: -15vw;
+            z-index: -1;
+            filter: blur(80px);
+            opacity: 0.4;
+        }
+
+        nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 2rem 10%;
+            position: absolute;
+            top: 0;
+            width: 100%;
+            z-index: 10;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            text-decoration: none;
+            color: white;
+            font-weight: 700;
+            font-size: 1.25rem;
+            letter-spacing: -0.02em;
+        }
+
+        .logo img {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+        }
+
+        .nav-links a {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.3s;
+            margin-left: 2rem;
+        }
+
+        .nav-links a:hover { color: var(--text); }
+
+        header {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 0 10%;
+        }
+
+        .badge {
+            background: var(--glass);
+            border: 1px solid var(--glass-border);
+            padding: 6px 16px;
+            border-radius: 999px;
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: var(--accent);
+            margin-bottom: 2rem;
+            display: inline-block;
+            backdrop-filter: blur(10px);
+        }
+
+        h1 {
+            font-size: clamp(2.5rem, 8vw, 4.5rem);
+            font-weight: 800;
+            letter-spacing: -0.04em;
+            line-height: 1.1;
+            margin-bottom: 1.5rem;
+            background: linear-gradient(to bottom, #fff 40%, #94a3b8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .hero-desc {
+            max-width: 600px;
+            font-size: 1.125rem;
+            color: var(--text-muted);
+            margin-bottom: 3rem;
+        }
+
+        .cta-group {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1.5rem;
+        }
+
+        .npx-card {
+            background: #000;
+            border: 1px solid var(--glass-border);
+            padding: 12px 24px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            font-family: var(--font-mono);
+            position: relative;
+            cursor: pointer;
+            transition: transform 0.2s, border-color 0.2s;
+            box-shadow: 0 10px 40px -10px rgba(0,0,0,0.5);
+        }
+
+        .npx-card:hover {
+            transform: translateY(-2px);
+            border-color: var(--accent);
+        }
+
+        .npx-card span { color: var(--accent); user-select: none; }
+        .npx-card .copy-hint { 
+            font-size: 0.75rem; 
+            color: var(--text-muted); 
+            margin-left: 10px;
+            font-family: var(--font-main);
+        }
+
+        .github-btn {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: color 0.3s;
+        }
+
+        .github-btn:hover { color: white; }
+
+        .dashboard-preview {
+            margin-top: 5rem;
+            width: 100%;
+            max-width: 1000px;
+            background: var(--glass);
+            border: 1px solid var(--glass-border);
+            border-radius: 24px;
+            padding: 12px;
+            backdrop-filter: blur(20px);
+            box-shadow: 0 40px 100px -20px rgba(0,0,0,0.8);
+            position: relative;
+        }
+
+        .dashboard-preview img {
+            width: 100%;
+            border-radius: 16px;
+            display: block;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .features {
+            padding: 100px 10%;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            max-width: 1240px;
+            margin: 0 auto;
+        }
+
+        .feature-card {
+            background: var(--glass);
+            border: 1px solid var(--glass-border);
+            padding: 2.5rem;
+            border-radius: 20px;
+            transition: transform 0.3s, background 0.3s;
+        }
+
+        .feature-card:hover {
+            background: rgba(255,255,255,0.05);
+            transform: translateY(-5px);
+        }
+
+        .feature-card h3 {
+            font-size: 1.25rem;
+            margin-bottom: 1rem;
+            color: #fff;
+        }
+
+        .feature-card p {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+        }
+
+        .feature-icon {
+            font-size: 2rem;
+            margin-bottom: 1.5rem;
+            display: block;
+        }
+
+        footer {
+            padding: 60px 10%;
+            text-align: center;
+            border-top: 1px solid var(--glass-border);
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        footer a { color: var(--accent); text-decoration: none; }
+
+        @media (max-width: 768px) {
+            h1 { font-size: 3rem; }
+            .nav-links { display: none; }
+        }
+
+        /* Animation */
+        @keyframes float {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+            100% { transform: translateY(0px); }
+        }
+        .dashboard-preview { animation: float 6s ease-in-out infinite; }
+    </style>
+</head>
+<body>
+    <div class="ambient"></div>
+    <div class="ambient-2"></div>
+
+    <nav>
+        <a href="#" class="logo">
+            <img src="logo.png" alt="Logo">
+            codex-spend
+        </a>
+        <div class="nav-links">
+            <a href="https://github.com/Rishet11/codex-spend" target="_blank">GitHub</a>
+            <a href="https://www.npmjs.com/package/codex-spend" target="_blank">NPM</a>
+        </div>
+    </nav>
+
+    <header>
+        <div class="badge">v1.1.0 Now Live</div>
+        <h1>Stop guessing your<br>OpenAI spend.</h1>
+        <p class="hero-desc">
+            A beautiful, local-first analytics dashboard for OpenAI Codex CLI users. 
+            Visualize your token usage, find cost-saving patterns, and stay within budget—all in one command.
+        </p>
+
+        <div class="cta-group">
+            <div class="npx-card" onclick="copyToClipboard('npx codex-spend')">
+                <span>$</span> npx codex-spend
+                <div class="copy-hint" id="copy-hint">Click to copy</div>
+            </div>
+            
+            <a href="https://github.com/Rishet11/codex-spend" class="github-btn" target="_blank">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+                View on GitHub
+            </a>
+        </div>
+
+        <div class="dashboard-preview">
+            <img src="https://github.com/user-attachments/assets/746d88ae-4f24-42f1-9457-3f33de8e8c89" alt="Dashboard Preview">
+        </div>
+    </header>
+
+    <div class="features" id="features">
+        <div class="feature-card">
+            <span class="feature-icon">🛡️</span>
+            <h3>Privacy First</h3>
+            <p>100% local. Your data stays on your machine. We never read your API keys or upload session payloads.</p>
+        </div>
+        <div class="feature-card">
+            <span class="feature-icon">⚡</span>
+            <h3>Instant Analytics</h3>
+            <p>Runs in seconds. Parses your local SQLite database and transaction logs to give you an immediate overview.</p>
+        </div>
+        <div class="feature-card">
+            <span class="feature-icon">💡</span>
+            <h3>Smart Insights</h3>
+            <p>Identifies expensive patterns like compounding context and high-output rewrites to save you real money.</p>
+        </div>
+    </div>
+
+    <footer>
+        <p>&copy; 2026 codex-spend. Built by <a href="https://github.com/Rishet11" target="_blank">Rishet Mehra</a>.</p>
+    </footer>
+
+    <script>
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text);
+            const hint = document.getElementById('copy-hint');
+            hint.textContent = 'Copied!';
+            hint.style.color = '#34C759';
+            setTimeout(() => {
+                hint.textContent = 'Click to copy';
+                hint.style.color = '#9CA3AF';
+            }, 2000);
+        }
+    </script>
+</body>
+</html>
