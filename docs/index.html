@@ -184,22 +184,94 @@
             position: relative;
         }
 
-        .dashboard-preview {
+        /* Carousel Styles */
+        .carousel-container {
+            position: relative;
+            width: 100%;
             background: var(--glass);
             border: 1px solid var(--glass-border);
             border-radius: 24px;
             padding: 12px;
             backdrop-filter: blur(20px);
             box-shadow: 0 40px 100px -20px rgba(0,0,0,0.8);
-            position: relative;
+            overflow: hidden;
             z-index: 2;
         }
 
-        .dashboard-preview img {
+        .carousel-track {
+            display: flex;
+            transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
             width: 100%;
+        }
+
+        .carousel-slide {
+            min-width: 100%;
             border-radius: 16px;
+            overflow: hidden;
+        }
+
+        .carousel-slide img {
+            width: 100%;
             display: block;
             border: 1px solid rgba(255,255,255,0.05);
+            border-radius: 16px;
+        }
+
+        .carousel-btn {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: white;
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 10;
+            backdrop-filter: blur(10px);
+            transition: background 0.3s, border-color 0.3s;
+        }
+
+        .carousel-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+            border-color: var(--accent);
+        }
+
+        .carousel-btn.prev { left: 24px; }
+        .carousel-btn.next { right: 24px; }
+
+        .carousel-dots {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 24px;
+        }
+
+        .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.2);
+            cursor: pointer;
+            transition: background 0.3s, width 0.3s;
+        }
+
+        .dot.active {
+            background: var(--accent);
+            width: 24px;
+            border-radius: 4px;
+        }
+
+        .carousel-caption {
+            text-align: center;
+            margin-top: 16px;
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            font-weight: 500;
         }
 
         /* Setup Section */
@@ -404,8 +476,39 @@
         </div>
 
         <div class="dashboard-wrapper">
-            <div class="dashboard-preview">
-                <img src="preview.png" alt="codex-spend dashboard preview showcasing token analytics and cost insights">
+            <div class="carousel-container">
+                <div class="carousel-track" id="carousel-track">
+                    <div class="carousel-slide">
+                        <img src="preview_hero.png" alt="codex-spend dashboard hero - stats overview">
+                    </div>
+                    <div class="carousel-slide">
+                        <img src="preview_insights.png" alt="codex-spend dashboard - automated insights">
+                    </div>
+                    <div class="carousel-slide">
+                        <img src="preview_projects.png" alt="codex-spend dashboard - project breakdown">
+                    </div>
+                    <div class="carousel-slide">
+                        <img src="preview_leaderboard.png" alt="codex-spend dashboard - prompt leaderboard">
+                    </div>
+                </div>
+                
+                <button class="carousel-btn prev" onclick="moveSlide(-1)">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                </button>
+                <button class="carousel-btn next" onclick="moveSlide(1)">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                </button>
+            </div>
+
+            <div class="carousel-dots" id="carousel-dots">
+                <div class="dot active" onclick="goToSlide(0)"></div>
+                <div class="dot" onclick="goToSlide(1)"></div>
+                <div class="dot" onclick="goToSlide(2)"></div>
+                <div class="dot" onclick="goToSlide(3)"></div>
+            </div>
+
+            <div class="carousel-caption" id="carousel-caption">
+                Dashboard Overview: 6 key metrics to track your Codex spend.
             </div>
         </div>
     </header>
@@ -486,6 +589,58 @@
                 hint.style.color = '#9CA3AF';
             }, 2000);
         }
+
+        // Carousel Logic
+        let currentSlide = 0;
+        const totalSlides = 4;
+        const track = document.getElementById('carousel-track');
+        const dots = document.querySelectorAll('.dot');
+        const caption = document.getElementById('carousel-caption');
+        
+        const captions = [
+            "Dashboard Overview: 6 key metrics to track your Codex spend.",
+            "Automated Insights: Discover hidden cost patterns and expensive behaviors.",
+            "Project Breakdown: See exactly which repositories are driving usage.",
+            "Prompt Leaderboard: Rank your most expensive prompts and conversation chains."
+        ];
+
+        function updateCarousel() {
+            track.style.transform = `translateX(-${currentSlide * 100}%)`;
+            
+            // Update dots
+            dots.forEach((dot, index) => {
+                dot.classList.toggle('active', index === currentSlide);
+            });
+
+            // Update caption
+            caption.style.opacity = 0;
+            setTimeout(() => {
+                caption.textContent = captions[currentSlide];
+                caption.style.opacity = 1;
+            }, 200);
+        }
+
+        function moveSlide(direction) {
+            currentSlide = (currentSlide + direction + totalSlides) % totalSlides;
+            updateCarousel();
+        }
+
+        function goToSlide(index) {
+            currentSlide = index;
+            updateCarousel();
+        }
+
+        // Auto-advance
+        let autoAdvance = setInterval(() => moveSlide(1), 5000);
+
+        // Pause auto-advance on hover
+        document.querySelector('.carousel-container').addEventListener('mouseenter', () => {
+            clearInterval(autoAdvance);
+        });
+
+        document.querySelector('.carousel-container').addEventListener('mouseleave', () => {
+            autoAdvance = setInterval(() => moveSlide(1), 5000);
+        });
     </script>
 </body>
 </html>
