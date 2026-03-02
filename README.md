@@ -1,4 +1,4 @@
-# 💸 codex-spend
+# 💸 Codex-Spend
 
 <p align="center">
   <img src="src/public/logo.png" width="120" height="120" alt="codex-spend logo">
