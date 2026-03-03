@@ -4,6 +4,12 @@
   <img src="src/public/logo.png" width="120" height="120" alt="codex-spend logo">
 </p>
 
+<p align="center">
+  <a href="https://startupslab.site" target="_blank" rel="noopener">
+    <img src="https://cdn.startupslab.site/site-images/badge-dark.png" alt="Featured on Startups Lab" width="200" height="54" />
+  </a>
+</p>
+
 **See where your OpenAI Codex tokens go. One command.**
 
 `codex-spend` is a local dashboard for analyzing OpenAI Codex CLI usage. It parses your local Codex session/state data and visualizes token usage, estimated cost, and patterns that can help reduce spend.
