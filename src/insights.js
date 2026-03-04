@@ -306,7 +306,7 @@ function generateInsights(sessions, allPrompts, totals, providerName = 'Codex') 
   }
 
   // 13. The "Abandoned Context" Waste
-  const abandonedSessions = sessions.filter(s => s.queryCount === 1 && s.queries[0].inputTokens > 80000 && (!s.queries[0].outputTokens || s.queries[0].outputTokens < 50));
+  const abandonedSessions = sessions.filter(s => s.queries && s.queries.length === 1 && s.queries[0].inputTokens > 80000 && (!s.queries[0].outputTokens || s.queries[0].outputTokens < 50));
   if (abandonedSessions.length > 3) {
     const abndnCostRaw = abandonedSessions.reduce((sum, s) => sum + s.cost, 0);
     const abndnCost = validateInsightCost('abandoned-context', abndnCostRaw);
@@ -319,6 +319,49 @@ function generateInsights(sessions, allPrompts, totals, providerName = 'Codex') 
         action: `Be mindful of starting heavy sessions you don't intend to finish. It costs money just to initialize the context window!`,
       });
     }
+  }
+
+  // == EVENT-BASED INSIGHTS (For Cursor & Tracking Providers) ==
+
+  // 14. High Turn Density (Deep Conversations)
+  const deepConversations = sessions.filter(s => s.queryCount > 15);
+  if (deepConversations.length > 3) {
+    const avgTurns = Math.round(deepConversations.reduce((sum, s) => sum + s.queryCount, 0) / deepConversations.length);
+    insights.push({
+      id: 'high-turn-density',
+      type: 'info',
+      title: `Deep Conversations detected (Avg ${avgTurns} turns)`,
+      description: `You have ${deepConversations.length} recent sessions with ${providerName} that exceeded 15 turns each. Deep conversations are great for complex logic, but be aware that every turn increases the background context size.`,
+      action: `If you feel the AI is getting "confused" or slow near the end of these ${avgTurns}-turn marathons, try starting a fresh session with just the current code state.`,
+    });
+  }
+
+  // 15. Rapid Succession (The Iteration Loop)
+  const dailySessions = {};
+  sessions.forEach(s => { if (s.date) dailySessions[s.date] = (dailySessions[s.date] || 0) + 1; });
+  const hyperActiveDays = Object.entries(dailySessions).filter(([date, count]) => count > 10);
+  if (hyperActiveDays.length > 0) {
+    const [bestDate, bestCount] = hyperActiveDays.sort((a, b) => b[1] - a[1])[0];
+    insights.push({
+      id: 'rapid-succession',
+      type: 'info',
+      title: `High-frequency iteration loop (${bestCount} sessions on ${bestDate})`,
+      description: `On ${bestDate}, you started ${bestCount} different conversation threads with ${providerName}. This indicates a very high-speed development cycle.`,
+      action: `If these were for related tasks, try staying in one session longer to benefit from shared context, which can improve the AI's understanding of your project structure.`,
+    });
+  }
+
+  // 16. The "Drafting" Habit (Short sessions)
+  const shortSessions = sessions.filter(s => s.queryCount <= 2);
+  if (shortSessions.length > 10 && sessions.length > 20) {
+    const pct = ((shortSessions.length / sessions.length) * 100).toFixed(0);
+    insights.push({
+      id: 'drafting-habit',
+      type: 'info',
+      title: `The "Quick Draft" habit (${pct}% of sessions are < 2 turns)`,
+      description: `In ${shortSessions.length} sessions (${pct}% of your total), you only asked 1 or 2 questions before ending the conversation with ${providerName}.`,
+      action: `This is a very efficient way to use AI for targeted questions. Just ensure you aren't paying a "baseline cost" (heavy input) for every single one of these short trips!`,
+    });
   }
 
   return insights;
