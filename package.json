@@ -1,10 +1,10 @@
 {
-  "name": "codex-spend",
-  "version": "1.1.2",
-  "description": "See where your OpenAI Codex tokens go. One command, zero setup.",
+  "name": "ai-spend",
+  "version": "2.0.0",
+  "description": "Universal local AI IDE spend tracker",
   "main": "index.js",
   "bin": {
-    "codex-spend": "index.js"
+    "ai-spend": "index.js"
   },
   "files": [
     "index.js",
@@ -18,6 +18,9 @@
   "keywords": [
     "openai",
     "codex",
+    "claude",
+    "antigravity",
+    "cursor",
     "tokens",
     "usage",
     "dashboard",
@@ -27,12 +30,12 @@
   "author": "Rishet Mehra <rishet11>",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Rishet11/codex-spend.git"
+    "url": "git+https://github.com/Rishet11/ai-spend.git"
   },
   "bugs": {
-    "url": "https://github.com/Rishet11/codex-spend/issues"
+    "url": "https://github.com/Rishet11/ai-spend/issues"
   },
-  "homepage": "https://github.com/Rishet11/codex-spend#readme",
+  "homepage": "https://github.com/Rishet11/ai-spend#readme",
   "license": "MIT",
   "engines": {
     "node": ">=18"
