@@ -100,6 +100,8 @@ async function parseAllSessions(options = {}) {
     weekOverWeek: 'N/A',
     hasUnknownPricing: false,
     dateRange: dailyUsage.length > 0 ? { from: dailyUsage[0].date, to: dailyUsage[dailyUsage.length - 1].date } : null,
+    providerType: 'tracking', // Identifies this as an event-based provider
+    eventLabel: 'Code Events'
   };
 
   const modelBreakdown = [
