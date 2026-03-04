@@ -6,41 +6,34 @@ const args = process.argv.slice(2);
 
 if (args.includes('--help') || args.includes('-h')) {
   console.log(`
-codex-spend - See where your OpenAI Codex tokens go
+ai-spend - Universal local AI IDE spend tracker
 
 Usage:
-  codex-spend [options]
+  ai-spend [options]
 
 Options:
-  --port <port>   Port to run dashboard on (default: 4321)
-  --state-db <path>  Override Codex state DB path (advanced)
-  --no-open       Don't auto-open browser
-  --help, -h      Show this help message
+  --provider <name>  Show data for: codex, claude-code, antigravity, cursor (default: all)
+  --port <port>      Port to run dashboard on (default: 4321)
+  --no-open          Don't auto-open browser
+  --help, -h         Show this help message
 
 Examples:
-  npx codex-spend          Open dashboard in browser
-  codex-spend --port 8080  Use custom port
-  codex-spend --state-db ~/.codex/state_6.sqlite
+  npx ai-spend                    Open dashboard for all providers
+  ai-spend --provider antigravity View only Antigravity usage
+  ai-spend --port 8080            Use custom port
 `);
   process.exit(0);
 }
 
 const portIndex = args.indexOf('--port');
 const port = portIndex !== -1 ? parseInt(args[portIndex + 1], 10) : 4321;
-const stateDbIndex = args.indexOf('--state-db');
-const stateDbPath = stateDbIndex !== -1 ? args[stateDbIndex + 1] : null;
+const providerIndex = args.indexOf('--provider');
+const providerSelection = providerIndex !== -1 ? args[providerIndex + 1] : 'all';
 const noOpen = args.includes('--no-open');
 
 if (isNaN(port)) {
   console.error('Error: --port must be a number');
   process.exit(1);
-}
-if (stateDbIndex !== -1 && (!stateDbPath || stateDbPath.startsWith('--'))) {
-  console.error('Error: --state-db must be a file path');
-  process.exit(1);
-}
-if (stateDbPath) {
-  process.env.CODEX_SPEND_STATE_DB = stateDbPath;
 }
 
 const app = createServer();
@@ -49,17 +42,28 @@ const server = app.listen(port, '127.0.0.1', async () => {
   const url = `http://localhost:${port}`;
   
   try {
-    const { parseAllSessions } = require('./src/parser');
-    const data = await parseAllSessions();
+    const providers = require('./src/providers');
+    let data = null;
+    let providerLabel = "Various Providers";
+    
+    if (providerSelection === 'all' || !providers[providerSelection]) {
+        // Just load Codex by default for the CLI table preview if 'all' is passed
+        data = await providers['codex'].parseAllSessions();
+        providerLabel = "Codex";
+    } else {
+        data = await providers[providerSelection].parseAllSessions();
+        providerLabel = providerSelection.charAt(0).toUpperCase() + providerSelection.slice(1);
+    }
+
     if (data && data.sessions && data.sessions.length > 0) {
       console.log('');
       console.log(' \x1b[38;2;0;113;227m  ____             _             \x1b[0m');
       console.log(' \x1b[38;2;0;113;227m / ___|  ___   __| |  ___ __  __\x1b[0m');
       console.log(' \x1b[38;2;0;113;227m| |     / _ \\ / _` | / _ \\\\ \\/ /\x1b[0m');
       console.log(' \x1b[38;2;0;113;227m| |___ | (_) | (_| ||  __/ >  < \x1b[0m');
-      console.log(' \x1b[38;2;0;113;227m \\____| \\___/ \\__,_| \\___|/_/\\_\\\x1b[0m   \x1b[38;2;50;173;230m- spend\x1b[0m');
+      console.log(' \x1b[38;2;0;113;227m \\____| \\___/ \\__,_| \\___|/_/\\_\\\x1b[0m   \x1b[38;2;50;173;230m- ai-spend\x1b[0m');
       console.log('');
-      console.log(' \x1b[37mSee where your OpenAI Codex tokens go. One command.\x1b[0m');
+      console.log(` \x1b[37mUniversal local AI IDE spend tracker. Showing preview for: ${providerLabel}\x1b[0m`);
       console.log('');
       
       const colTitle = 28;
@@ -97,15 +101,20 @@ const server = app.listen(port, '127.0.0.1', async () => {
         const reasoning = rsn.padEnd(colReasoning);
         
         const formatK = (n) => n >= 1_000_000 ? (n/1_000_000).toFixed(1) + 'm' : (n >= 1000 ? (n/1000).toFixed(0) + 'k' : n.toString());
-        const tokensStr = formatK(s.totalTokens).padEnd(colTokens);
+        let tokensStr = formatK(s.totalTokens).padEnd(colTokens);
+        if (s.isEstimated) tokensStr = ('~' + tokensStr.trim()).padEnd(colTokens);
         
         let costStr;
         if (s.cost === 0 && data.totals.hasUnknownPricing) {
           costStr = " N/A".padStart(colCost);
+        } else if (s.cost === 0 && s.totalTokens === 0) {
+          costStr = " N/A".padStart(colCost); // e.g. Cursor
         } else if (s.cost > 0 && s.cost < 0.01) {
           costStr = "< $0.01".padStart(colCost);
         } else {
           costStr = ('$' + s.cost.toFixed(2)).padStart(colCost);
+          if (s.isEstimated) costStr = '~' + costStr.trim();
+          costStr = costStr.padStart(colCost);
         }
 
         console.log(`${title} | ${dateStr} | ${model} | ${reasoning} | ${tokensStr} | ${costStr}`);
