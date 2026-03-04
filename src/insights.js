@@ -1,38 +1,34 @@
 const { MODEL_PRICING, calculateCost } = require('./pricing');
 const { getModelContextLimits, resolveContextLimit, normalizeReasoningLevel, wordCount } = require('./utils');
-function generateInsights(sessions, allPrompts, totals) {
+function generateInsights(sessions, allPrompts, totals, providerName = 'Codex') {
   const insights = [];
 
   function fmt(n) {
+    if (n === undefined || n === null) return '0';
     if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
-    if (n >= 10_000) return (n / 1_000).toFixed(0) + 'K';
-    if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K';
+    if (n >= 10_000) return (n / 1_000).toFixed(0) + 'k';
+    if (n >= 1_000) return (n / 1_000).toFixed(1) + 'k';
     return n.toLocaleString();
   }
 
   function modelShort(m) {
     if (!m) return 'Unknown';
-    // Format: gpt-5.3-codex -> GPT 5.3 Codex
-    let match = m.match(/^gpt-([\d\.]+)-codex(?:-(mini|max))?/i);
+    
+    // Generic model shortening for all providers
+    // Matches gpt-X.X, claude-X.X, etc.
+    let match = m.match(/^([a-z0-9-]+?)(?:-([\d\.]+))?(?:-(mini|max|sonnet|opus|haiku))?$/i);
     if (match) {
-      if (match[2]) {
-        // gpt-5.1-codex-mini -> GPT 5.1 Mini
-        const modifier = match[2].charAt(0).toUpperCase() + match[2].slice(1);
-        return `GPT ${match[1]} ${modifier}`;
-      }
-      return `GPT ${match[1]} Codex`;
-    }
-    // Format: gpt-5.2 -> GPT 5.2
-    match = m.match(/^gpt-([\d\.]+)/i);
-    if (match) {
-      return `GPT ${match[1]}`;
+      const toolBase = match[1].charAt(0).toUpperCase() + match[1].slice(1);
+      const version = match[2] || '';
+      const modifier = match[3] ? (match[3].charAt(0).toUpperCase() + match[3].slice(1)) : '';
+      return `${toolBase} ${version} ${modifier}`.trim();
     }
     return m;
   }
 
   function validateInsightCost(insightId, value) {
     if (!Number.isFinite(value)) {
-      console.warn(`[codex-spend] Suppressing insight "${insightId}" due to invalid cost value: ${value}`);
+      console.warn(`[ai-spend] Suppressing insight "${insightId}" due to invalid cost value: ${value}`);
       return null;
     }
     return value;
@@ -58,14 +54,13 @@ function generateInsights(sessions, allPrompts, totals) {
         id: 'context-growth',
         type: 'warning',
         title: `The longer you chat, the more each message costs ($${first5Cost.toFixed(2)} grew to $${last5Cost.toFixed(2)}/msg)`,
-        description: `In ${growthData.length} of your conversations, the messages near the end cost ${avgGrowth}x more than the ones at the start. Why? Every time you send a message, Codex re-reads the entire conversation from the beginning. So message #5 is cheap, but message #80 is expensive because Codex is re-reading 79 previous messages plus all the code it wrote. Your longest conversation ("${worstSession.session.firstPrompt.substring(0, 50)}...") grew to $${last5Cost.toFixed(2)} per message by the end, compared to $${first5Cost.toFixed(2)} at the start.`,
-        action: 'Start a fresh conversation when you move to a new task. If you need context from before, paste a short summary in your first message. This gives Codex a clean slate instead of re-reading hundreds of old messages.',
+        description: `In ${growthData.length} of your conversations with ${providerName}, the messages near the end cost ${avgGrowth}x more than the ones at the start. Why? Every time you send a message, the AI re-reads the entire conversation from the beginning. So message #5 is cheap, but message #80 is expensive because it is re-reading 79 previous messages plus all the code it wrote. Your longest conversation ("${worstSession.session.firstPrompt.substring(0, 50)}...") grew to $${last5Cost.toFixed(2)} per message by the end, compared to $${first5Cost.toFixed(2)} at the start.`,
+        action: `Start a fresh conversation when you move to a new task. If you need context from before, paste a short summary in your first message. This gives ${providerName} a clean slate instead of re-reading hundreds of old messages.`,
       });
     }
   }
 
   // 2. Output Optimization (The Stop Yapping Rule)
-  // Replaces the old 'marathon session' to focus on high-output rewrites.
   if (sessions.length > 0) {
     const heavyWriters = sessions.filter(s => s.queryCount > 0 && (s.outputTokens / s.queryCount) > 2500);
     if (heavyWriters.length > 0) {
@@ -75,8 +70,8 @@ function generateInsights(sessions, allPrompts, totals) {
       insights.push({
         id: 'output-optimization',
         type: 'warning',
-        title: `Codex is rewriting entire files (${fmt(avgOutput)} output tokens / ~$${estCostPerTurn.toFixed(2)} per turn)`,
-        description: `In the session "${worst.firstPrompt.substring(0, 50)}...", Codex averaged ${fmt(avgOutput)} output tokens every time it replied. This usually means it is rewriting massive files from scratch just to change one or two lines, which drains your budget quickly.`,
+        title: `${providerName} is rewriting entire files (${fmt(avgOutput)} output tokens / ~$${estCostPerTurn.toFixed(2)} per turn)`,
+        description: `In the session "${worst.firstPrompt.substring(0, 50)}...", ${providerName} averaged ${fmt(avgOutput)} output tokens every time it replied. This usually means it is rewriting massive files from scratch just to change one or two lines, which drains your budget quickly.`,
         action: `Add a system rule like: "Only return the functions you changed, do not rewrite the entire file." This keeps the output tokens strictly focused on edits.`,
       });
     }
@@ -90,7 +85,6 @@ function generateInsights(sessions, allPrompts, totals) {
       return { session: s, burnRate: Math.round(s.totalTokens / mins), costRate: s.cost / mins };
     }).sort((a, b) => b.burnRate - a.burnRate);
     
-    // Only show if the burn rate is actually somewhat high (>10k per minute)
     topBurners = topBurners.filter(b => b.burnRate > 10000);
 
     if (topBurners.length > 0) {
@@ -110,11 +104,10 @@ function generateInsights(sessions, allPrompts, totals) {
   
   const nearLimitSessions = sessions.filter(s => {
     const limit = resolveContextLimit(s.model, modelContextLimits);
-    // We check the peak single-request input tokens to see if it was near the limit
     if (!s.queries || s.queries.length === 0) return false;
     if (!limit) return false;
     const peakInput = Math.max(...s.queries.map(q => q.requestInputTokens || 0));
-    return peakInput > (limit * 0.8); // 80% utilisation
+    return peakInput > (limit * 0.8);
   });
 
   if (nearLimitSessions.length > 0) {
@@ -126,7 +119,7 @@ function generateInsights(sessions, allPrompts, totals) {
       type: 'warning',
       title: `Approaching context window limits (${((peakInput/limit)*100).toFixed(0)}% full)`,
       description: `In ${nearLimitSessions.length === 1 ? 'one conversation' : nearLimitSessions.length + ' conversations'} (like "${s.firstPrompt.substring(0, 50)}..."), your context reached ${fmt(peakInput)} tokens in a single request. The absolute limit for ${modelShort(s.model)} is ${fmt(limit)}. As you approach the limit, the model may forget earlier instructions or begin ignoring files.`,
-      action: 'Close unused files in your IDE and aggressively start new conversations when tackling distinct sub-tasks. Codex works best when its context window is focused only on what is strictly necessary.',
+      action: `Close unused files in your IDE and aggressively start new conversations when tackling distinct sub-tasks. ${providerName} works best when its context window is focused only on what is strictly necessary.`,
     });
   } else {
     const highContextUnknownLimit = sessions
@@ -158,7 +151,6 @@ function generateInsights(sessions, allPrompts, totals) {
   });
   
   if (highReasoningQueries.length > 0) {
-    // Find queries where prompt is very short but reasoning is very high
     const lowROIPrompts = highReasoningQueries.filter(q => 
       q.userPrompt && !q.userPrompt.includes('<image>') && wordCount(q.userPrompt) < 20 && q.reasoningTokens > 2000
     );
@@ -171,7 +163,7 @@ function generateInsights(sessions, allPrompts, totals) {
         type: 'warning',
         title: `Low ROI on "High" Reasoning Effort (${fmt(wastedTokens)} tokens / wasted $${wastedCost.toFixed(2)})`,
         description: `You have ${lowROIPrompts.length} recent prompts that were very short (under 20 words) but generated over 2,000 hidden reasoning tokens each. For example, asking "${lowROIPrompts[0].userPrompt.substring(0, 30)}..." burned massive reasoning tokens. While it only cost $${wastedCost.toFixed(2)} here, this habit will scale up to drain your wallet over hundreds of queries. High reasoning effort is charged as expensive output tokens.`,
-        action: `Switch Codex to "Low" reasoning effort for quick formatting requests, simple questions, or small targeted edits. Only use "High" effort for complex architectural design or tough bug fixing.`,
+        action: `Switch to "Low" reasoning effort for quick formatting requests, simple questions, or small targeted edits. Only use "High" effort for complex architectural design or tough bug fixing.`,
       });
     }
   }
@@ -186,8 +178,8 @@ function generateInsights(sessions, allPrompts, totals) {
       id: 'tab-hoarder',
       type: 'warning',
       title: `You might be a Tab Hoarder (Cost you ~$${totalWasted.toFixed(2)} across ${massiveBaselines.length} sessions)`,
-      description: `In ${massiveBaselines.length} recent conversations, your very first message sent over ${fmt(avgStart)} input tokens to Codex. This usually happens when you have dozens of unrelated files open in your IDE. Codex is forced to read all of them every time you ask a question. Charging ~$${avgCost.toFixed(2)} per session just to say hello quietly adds up ($${totalWasted.toFixed(2)} total here).`,
-      action: `Close unused files and tabs before starting a new conversation. This dramatically reduces your base input token cost and speeds up Codex's response time by giving it less noise to sift through.`,
+      description: `In ${massiveBaselines.length} recent conversations, your very first message sent over ${fmt(avgStart)} input tokens to ${providerName}. This usually happens when you have dozens of unrelated files open in your IDE. The AI is forced to read all of them every time you ask a question. Charging ~$${avgCost.toFixed(2)} per session just to say hello quietly adds up ($${totalWasted.toFixed(2)} total here).`,
+      action: `Close unused files and tabs before starting a new conversation. This dramatically reduces your base input token cost and speeds up response time by giving the AI less noise to sift through.`,
     });
   }
 
@@ -199,13 +191,13 @@ function generateInsights(sessions, allPrompts, totals) {
         id: 'cache-optimization',
         type: 'info',
         title: `Your cache hit rate is only ${cachePct.toFixed(0)}%`,
-        description: `Codex offers a massive 90% discount on "cached" input tokens. Currently, out of ${fmt(totals.totalInputTokens)} total input tokens, only ${fmt(totals.totalCacheReadTokens)} were served from cache. This means you are paying full price for heavily repetitive context.`,
+        description: `Many modern AI tools offer a massive discount on "cached" input tokens. Currently, out of ${fmt(totals.totalInputTokens)} total input tokens, only ${fmt(totals.totalCacheReadTokens)} were served from cache. This means you are paying full price for heavily repetitive context.`,
         action: 'To maximize cache hits, keep your system prompts and large files at the beginning of the context, and only add new messages to the end. Modifying files that were included early in the conversation will invalidate the cache.',
       });
     }
   }
 
-  // 7. Night Owl / Time-of-Day Habits
+  // 7. Night Owl Habit
   if (totals.totalTokens > 0 && sessions.length > 5) {
     let lateNightTokens = 0;
     let lateNightCost = 0;
@@ -216,7 +208,7 @@ function generateInsights(sessions, allPrompts, totals) {
         const dt = new Date(ts);
         const hour = dt.getHours();
         totalTimeTokens += s.totalTokens;
-        if (hour >= 22 || hour < 4) { // 10 PM to 4 AM
+        if (hour >= 22 || hour < 4) {
           lateNightTokens += s.totalTokens;
           lateNightCost += s.cost;
         }
@@ -230,7 +222,7 @@ function generateInsights(sessions, allPrompts, totals) {
           id: 'night-owl',
           type: 'info',
           title: `You are a Night Owl! (${nightPct.toFixed(0)}% late-night usage / $${lateNightCost.toFixed(2)})`,
-          description: `Most of your heavy lifting happens when the sun goes down. Exactly ${nightPct.toFixed(0)}% of your total Codex token usage (${fmt(lateNightTokens)} tokens, costing $${lateNightCost.toFixed(2)}) happens between 10:00 PM and 4:00 AM.`,
+          description: `Most of your heavy lifting happens when the sun goes down. Exactly ${nightPct.toFixed(0)}% of your total ${providerName} token usage (${fmt(lateNightTokens)} tokens, costing $${lateNightCost.toFixed(2)}) happens between 10:00 PM and 4:00 AM.`,
           action: `Late night coding sessions can lead to marathon context windows. Remember to start fresh conversations if you switch topics deep into the night to avoid dragging huge memory payloads.`,
         });
       }
@@ -240,37 +232,20 @@ function generateInsights(sessions, allPrompts, totals) {
   // 8. The "One-Word Reply" Trap
   const tinyPrompts = allQueries.filter(q => q.userPrompt && !q.userPrompt.includes('<image>') && wordCount(q.userPrompt) < 3 && q.inputTokens > 100000);
   if (tinyPrompts.length > 3) {
-    const wastedCost = tinyPrompts.reduce((sum, q) => sum + calculateCost(q.model, q.inputTokens, 0, 0, 0), 0);
-    insights.push({
-      id: 'one-word-reply',
-      type: 'warning',
-      title: `The "One-Word Reply" Trap (wasted ~$${wastedCost.toFixed(2)})`,
-      description: `In ${tinyPrompts.length} recent queries, you replied with less than 3 words (like "${tinyPrompts[0].userPrompt}"), which forced Codex to re-read a massive context history of over 100k tokens each time.`,
-      action: `Try to batch your feedback into a single descriptive message instead of rapid-fire short replies.`,
-    });
-  }
-
-  // 9. Model Downgrade Opportunity
-  const overpaidSessions = sessions.filter(s => s.model.includes('gpt-5.3-codex') && s.queryCount <= 2 && s.outputTokens < 300);
-  if (overpaidSessions.length > 5) {
-    let savings = 0;
-    overpaidSessions.forEach(s => {
-      const gpt53Cost = s.cost;
-      const gpt51Cost = s.queries.reduce((sum, q) => sum + calculateCost('gpt-5.1-codex-mini', q.inputTokens, q.cachedTokens, q.outputTokens, q.reasoningTokens), 0);
-      savings += (gpt53Cost - gpt51Cost);
-    });
-    if (savings > 1) {
+    const wastedCostRaw = tinyPrompts.reduce((sum, q) => sum + calculateCost(q.model, q.inputTokens, 0, 0, 0), 0);
+    const wastedCost = validateInsightCost('one-word-reply', wastedCostRaw);
+    if (wastedCost !== null) {
       insights.push({
-        id: 'model-downgrade',
-        type: 'info',
-        title: `Model Downgrade Opportunity (save ~$${savings.toFixed(2)})`,
-        description: `We noticed ${overpaidSessions.length} very short sessions using the premium \`gpt-5.3-codex\` model where you only generated a few lines of output.`,
-        action: `For simple questions or quick formatting tasks, explicitly select \`gpt-5.1-codex-mini\`. It usually delivers similar performance at a lower cost.`,
+        id: 'one-word-reply',
+        type: 'warning',
+        title: `The "One-Word Reply" Trap (wasted ~$${wastedCost.toFixed(2)})`,
+        description: `In ${tinyPrompts.length} recent queries, you replied with less than 3 words (like "${tinyPrompts[0].userPrompt}"), which forced ${providerName} to re-read a massive context history of over 100k tokens each time.`,
+        action: `Try to batch your feedback into a single descriptive message instead of rapid-fire short replies.`,
       });
     }
   }
 
-  // 10. The Tool Loop Warning (Infinite Loops)
+  // 10. The Tool Loop Warning
   const heavyToolQueries = allQueries.filter(q => q.continuations > 10);
   if (heavyToolQueries.length > 0) {
     const worstToolQuery = heavyToolQueries.sort((a,b) => b.continuations - a.continuations)[0];
@@ -308,7 +283,7 @@ function generateInsights(sessions, allPrompts, totals) {
       const ts = s.createdAt || s.updatedAt;
       if (ts) {
         const dt = new Date(ts);
-        const day = dt.getDay(); // 0 is Sunday, 6 is Saturday
+        const day = dt.getDay();
         if (day === 0 || day === 6) {
           weekendTokens += s.totalTokens;
           weekendCost += s.cost;
