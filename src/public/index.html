@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Codex Spend</title>
+<title>AI Spend</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/luxon@3.4.4/build/global/luxon.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1.3.1/dist/chartjs-adapter-luxon.umd.min.js"></script>
@@ -139,6 +139,25 @@
     box-shadow: var(--card-shadow-hover);
     transform: translateY(-1px);
   }
+  .provider-tabs {
+    display: flex; gap: 8px; margin-bottom: var(--space-5);
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 16px; flex-wrap: wrap;
+  }
+  .provider-tab {
+    padding: 8px 16px; border-radius: 980px; font-size: 14px; font-weight: 500;
+    cursor: pointer; transition: all 0.2s; border: 1px solid transparent;
+    color: var(--text-secondary); background: transparent;
+  }
+  .provider-tab:hover { background: rgba(0,0,0,0.04); color: var(--text); }
+  .provider-tab.active {
+    background: var(--white); border-color: var(--border);
+    color: var(--text); box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  }
+  .provider-tab.codex.active { color: #34C759; }
+  .provider-tab.claude-code.active { color: #5856D6; }
+  .provider-tab.antigravity.active { color: #0071E3; }
+  .provider-tab.cursor.active { color: #FF9500; }
   .stat-card.stat-priority {
     border-color: rgba(0, 113, 227, 0.15);
     background: linear-gradient(180deg, rgba(0, 113, 227, 0.04) 0%, var(--white) 100%);
@@ -896,9 +915,9 @@
   <div class="header">
     <div class="header-left">
       <div class="logo-mark">
-        <img src="logo.png" alt="Codex Spend Logo">
+        <div style="font-size: 24px; font-weight: bold; color: var(--accent);">AI</div>
       </div>
-      <h1>Codex Spend</h1>
+      <h1>AI Spend</h1>
     </div>
     <div class="header-right">
       <span id="dateRange" class="date-range"></span>
@@ -908,10 +927,10 @@
       </button>
     </div>
   </div>
-  <!-- Value proposition -->
   <div class="hero-section">
-    <p class="hero-subtitle">See token usage, cost, and efficiency at a glance.</p>
+    <p class="hero-subtitle">See token usage, cost, and efficiency across all your AI IDEs.</p>
   </div>
+  <div id="providerTabs" class="provider-tabs"></div>
   <div id="pricingWarning" class="privacy-notice animate" style="display:none; background: rgba(255,149,0,0.08); border-color: rgba(255,149,0,0.15); color: #C93400; margin-bottom: 30px;">
     ⚠️ Some models have unknown pricing. Estimated costs may be lower than actual.
   </div>
@@ -1073,11 +1092,19 @@
   </div>
   <div class="footer">
     <div style="margin-bottom: 8px; color: var(--text-secondary); font-size: 13px;">This tool runs 100% locally — no analytics, no tracking. If you find it useful (or not), I'd love to hear from you at <a href="mailto:rishetmehra11@gmail.com">rishetmehra11@gmail.com</a></div>
-    Made with <a href="https://openai.com/blog/openai-codex/" target="_blank">OpenAI Codex</a> and ❤ by <a href="https://www.linkedin.com/in/rishetmehra/" target="_blank">Rishet Mehra</a> (<a href="https://github.com/Rishet11" target="_blank" style="margin-left: 4px;">GitHub</a>)
+    Made with your local AI environments and ❤ by <a href="https://www.linkedin.com/in/rishetmehra/" target="_blank">Rishet Mehra</a> (<a href="https://github.com/Rishet11" target="_blank" style="margin-left: 4px;">GitHub</a>)
   </div>
 </div>
 <script>
 let DATA = null;
+let currentProvider = '';
+let availableProviders = {};
+const providerMeta = {
+  'codex': { name: 'Codex', color: '#34C759' },
+  'claude-code': { name: 'Claude Code', color: '#5856D6' },
+  'antigravity': { name: 'Antigravity', color: '#0071E3' },
+  'cursor': { name: 'Cursor', color: '#FF9500' }
+};
 let currentSort = { key: 'total', dir: 'desc' };
 let searchQuery = '';
 let dailyChartInstance = null;
@@ -1128,12 +1155,16 @@ if (drilldownBackdrop) {
   });
 }
 function fmt(n) {
+  if (n === undefined || n === null) return '0';
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
-  if (n >= 10_000) return (n / 1_000).toFixed(0) + 'K';
-  if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K';
+  if (n >= 10_000) return (n / 1_000).toFixed(0) + 'k';
+  if (n >= 1_000) return (n / 1_000).toFixed(1) + 'k';
   return n.toLocaleString();
 }
-function fmtFull(n) { return n.toLocaleString(); }
+function fmtFull(n) { 
+  if (n === undefined || n === null) return '0';
+  return n.toLocaleString(); 
+}
 function modelClass(m) {
   const norm = m.toLowerCase();
   if (norm.includes('5.3')) return 'model-codex-5-3';
@@ -1174,14 +1205,24 @@ function formatDate(d) {
 }
 async function fetchData() {
   try {
-    const res = await fetch('/api/data');
+    if (Object.keys(availableProviders).length === 0) {
+      const pRes = await fetch('/api/providers');
+      availableProviders = await pRes.json();
+      const detected = Object.keys(availableProviders).filter(k => availableProviders[k].isDetected);
+      if (detected.length === 0) {
+        showError('No AI IDE activity found on this machine.');
+        return;
+      }
+      if (!currentProvider || !detected.includes(currentProvider)) {
+        currentProvider = detected.includes('codex') ? 'codex' : detected[0];
+      }
+      renderProviderTabs(detected);
+    }
+
+    const res = await fetch(`/api/data?provider=${currentProvider}`);
     const json = await res.json();
     if (!res.ok || json.error) {
       showError(json.error || `Server returned ${res.status}`);
-      return;
-    }
-    if (!json.totals || !Object.keys(json.totals).length || !json.sessions) {
-      showError('No session data found. Make sure you have used OpenAI Codex at least once.');
       return;
     }
     DATA = json;
@@ -1189,6 +1230,24 @@ async function fetchData() {
   } catch (err) {
     showError('Failed to load data: ' + err.message);
   }
+}
+function renderProviderTabs(detectedKeys) {
+  const container = document.getElementById('providerTabs');
+  container.style.display = 'flex';
+  container.innerHTML = detectedKeys.map(k => {
+    const p = providerMeta[k] || { name: k };
+    return `<button class="provider-tab ${k} ${k === currentProvider ? 'active' : ''}" onclick="switchProvider('${k}')">${p.name}</button>`;
+  }).join('');
+}
+function switchProvider(p) {
+  if (p === currentProvider) return;
+  currentProvider = p;
+  document.querySelectorAll('.provider-tab').forEach(b => {
+    b.classList.toggle('active', b.classList.contains(p));
+  });
+  document.getElementById('loading').style.display = 'flex';
+  document.getElementById('app').style.display = 'none';
+  fetchData();
 }
 function showError(msg) {
   document.getElementById('loading').style.display = 'none';
@@ -1223,7 +1282,7 @@ async function refreshData(silent = false) {
   }
   const errEl = document.getElementById('error-display');
   if (errEl) errEl.remove();
-  try { await fetch('/api/refresh'); } catch {}
+  try { await fetch(`/api/refresh?provider=${currentProvider}`); } catch {}
   await fetchData();
 }
 function render() {
@@ -1253,10 +1312,14 @@ function renderStats() {
   const uncachedInput = Math.max(0, (t.totalInputTokens || 0) - cacheTotal);
   const reasoning = t.totalReasoningTokens || 0;
   const avgTokensPerMsg = t.totalQueries > 0 ? Math.round((t.totalTokens || 0) / t.totalQueries) : 0;
+  const isEst = DATA.sessions && DATA.sessions.some(s => s.isEstimated);
+  const prefix = isEst ? '~' : '';
+  let costStr = prefix + '$' + (t.totalCost || 0).toFixed(2);
+  if (t.totalCost === 0 && t.totalTokens === 0) costStr = 'N/A';
   const cards = [
-    { label: 'Total Usage', value: fmt(t.totalTokens || 0), sub: `${fmt(uncachedInput)} in · ${fmt(cacheTotal)} cache · ${fmt(reasoning)} rsn · ${fmt(t.totalOutputTokens || 0)} out`,
+    { label: 'Total Usage', value: prefix + fmt(t.totalTokens || 0), sub: `${prefix}${fmt(uncachedInput)} in · ${prefix}${fmt(cacheTotal)} cache · ${prefix}${fmt(reasoning)} rsn · ${prefix}${fmt(t.totalOutputTokens || 0)} out`,
       tip: '<div style="margin-bottom:6px">The absolute total volume of tokens processed.</div><div style="font-size:12px;opacity:0.7"><b>Math:</b> Uncached Input + Cached Input + Reasoning + Output.</div>' },
-    { label: 'Est. Cost', value: '$' + (t.totalCost || 0).toFixed(2), sub: `Based on API Codex prices`,
+    { label: 'Est. Cost', value: costStr, sub: `Based on API Codex prices`,
       tip: '<div style="margin-bottom:6px">The estimated dollar cost of your local usage.</div><div style="font-size:12px;opacity:0.7"><b>Math:</b> Calculated per message by multiplying tokens by their specific model pricing tier.</div>' },
     { label: 'Conversations', value: fmtFull(t.totalSessions), sub: `~${fmt(t.avgTokensPerSession)} tokens avg`,
       tip: '<div style="margin-bottom:6px">A continuous thread with Codex.</div><div style="font-size:12px;opacity:0.7"><b>Context:</b> The high average size proves how much files and history your IDE bundles as the conversation builds up.</div>' },
@@ -1605,7 +1668,7 @@ function renderSessions() {
       <td class="col-prompt"><div class="prompt-preview" title="${escapeHtml(s.firstPrompt)}">${escapeHtml(s.firstPrompt)}</div></td>
       <td class="col-model"><span class="model-badge ${modelClass(s.model)}"><span class="model-dot"></span>${modelShort(s.model)}</span></td>
       <td class="token-num col-nums">${s.queryCount}</td>
-      <td class="token-num col-nums primary-total">${fmt(s.totalTokens)}</td>
+      <td class="token-num col-nums primary-total">${s.isEstimated ? '~' : ''}${fmt(s.totalTokens)}</td>
       <td class="col-actions" style="text-align:right">
         <button class="session-expand-btn" type="button" onclick="event.stopPropagation();toggleSessionExpand('${s.sessionId}')" aria-expanded="${isExpanded}">
           ${isExpanded ? 'Hide' : 'Details'}
