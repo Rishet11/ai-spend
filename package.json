@@ -1,6 +1,6 @@
 {
   "name": "ai-spend",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Universal local AI IDE spend tracker",
   "main": "index.js",
   "bin": {
