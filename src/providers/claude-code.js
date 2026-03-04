@@ -234,7 +234,7 @@ async function parseAllSessions(options = {}) {
     dateRange: dailyUsage.length > 0 ? { from: dailyUsage[0].date, to: dailyUsage[dailyUsage.length - 1].date } : null,
   };
 
-  const insights = generateInsights(sessions, allPrompts, totals);
+  const insights = generateInsights(sessions, allPrompts, totals, 'Claude Code');
 
   return {
     sessions,

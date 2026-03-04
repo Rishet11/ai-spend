@@ -140,7 +140,7 @@ async function parseAllSessions(options = {}) {
     }
   ];
 
-  const insights = generateInsights(sessions, [], totals);
+  const insights = generateInsights(sessions, [], totals, 'Antigravity');
 
   return {
     sessions,

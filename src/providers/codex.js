@@ -592,7 +592,7 @@ async function parseAllSessions(options = {}) {
     }, 0);
   }, 0);
 
-  const insights = generateInsights(sessions, allPrompts, totals);
+  const insights = generateInsights(sessions, allPrompts, totals, 'Codex');
 
   return {
     sessions,

@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { spawnSync } = require('child_process');
+const { generateInsights } = require('../insights');
 
 function getCursorDbPath() {
   return path.join(os.homedir(), '.cursor', 'ai-tracking', 'ai-code-tracking.db');
@@ -124,7 +125,7 @@ async function parseAllSessions(options = {}) {
     topPromptsByCost: [],
     totals,
     projectBreakdown: [],
-    insights: [] // No token insights for Cursor since no tokens
+    insights: generateInsights(sessions, [], totals, 'Cursor')
   };
 }
 
