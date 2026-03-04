@@ -8,11 +8,18 @@ function getCodexDir() {
 }
 
 const DEFAULT_CONTEXT_LIMITS = {
+  // Codex
   'gpt-5.3-codex': 128000,
   'gpt-5.2-codex': 128000,
   'gpt-5.1-codex-max': 128000,
   'gpt-5.1-codex-mini': 128000,
   'gpt-5.2': 128000,
+  // Claude
+  'claude-3-5-sonnet': 200000,
+  'claude-3-opus': 200000,
+  'claude-3-haiku': 200000,
+  // Antigravity
+  'antigravity': 128000
 };
 
 let cachedContextLimits = null;
@@ -45,20 +52,33 @@ function resolveContextLimit(model, limits) {
   if (!model) return null;
   const m = String(model).toLowerCase();
   if (limits[m]) return limits[m];
+  
+  // Fuzzy matching for various providers
   if (m.includes('5.3') && limits['gpt-5.3-codex']) return limits['gpt-5.3-codex'];
   if (m.includes('codex-mini') && limits['gpt-5.1-codex-mini']) return limits['gpt-5.1-codex-mini'];
   if (m.includes('codex-max') && limits['gpt-5.1-codex-max']) return limits['gpt-5.1-codex-max'];
-  if (m.includes('5.2-codex') && limits['gpt-5.2-codex']) return limits['gpt-5.2-codex'];
-  if (m.includes('5.2') && limits['gpt-5.2']) return limits['gpt-5.2'];
+  if (m.includes('sonnet') && limits['claude-3-5-sonnet']) return limits['claude-3-5-sonnet'];
+  if (m.includes('opus') && limits['claude-3-opus']) return limits['claude-3-opus'];
+  if (m.includes('antigravity')) return limits['antigravity'];
+  
+  if (m.includes('5.2')) return limits['gpt-5.2'] || 128000;
   return null;
 }
 
 function cleanPrompt(text) {
   if (!text) return "(No Prompt)";
-  const splitIdx = text.lastIndexOf("## My request for Codex:");
-  if (splitIdx !== -1) {
-    const extracted = text.substring(splitIdx + "## My request for Codex:".length).trim();
-    if (extracted) return extracted;
+  // Patterns used by different AI IDEs to append metadata
+  const separators = [
+    "## My request for Codex:",
+    "## Request:",
+    "--- Request ---"
+  ];
+  for (const sep of separators) {
+    const idx = text.lastIndexOf(sep);
+    if (idx !== -1) {
+      const extracted = text.substring(idx + sep.length).trim();
+      if (extracted) return extracted;
+    }
   }
   const trimmed = text.trim();
   if (trimmed.startsWith("# AGENTS.md")) return "(No Prompt)";
