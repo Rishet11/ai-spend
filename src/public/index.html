@@ -729,16 +729,15 @@
   }
   .model-badge:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   /* Clean Apple-style badge colors */
-  .model-codex-5-3 { background: rgba(52,199,89,0.1); color: #248A3D; border: none; }
-  .model-codex-5-2 { background: rgba(52,199,89,0.08); color: #34C759; border: none; }
-  .model-codex-max { background: rgba(255,149,0,0.1); color: #C93400; border: none; }
-  .model-codex-mini { background: rgba(0,122,255,0.1); color: #0071E3; border: none; }
+  .model-gpt { background: rgba(52,199,89,0.1); color: #248A3D; border: none; }
+  .model-claude { background: rgba(88,86,214,0.1); color: #434190; border: none; }
+  .model-antigravity { background: rgba(0,113,227,0.1); color: #004080; border: none; }
   .model-unknown { background: rgba(142,142,147,0.1); color: #8E8E93; border: none; }
   .model-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
-  .model-codex-5-3 .model-dot { background: #34C759; }
-  .model-codex-5-2 .model-dot { background: #30D158; }
-  .model-codex-max .model-dot { background: #FF9500; }
-  .model-codex-mini .model-dot { background: #007AFF; }
+  .model-gpt .model-dot { background: #34C759; }
+  .model-claude .model-dot { background: #5856D6; }
+  .model-antigravity .model-dot { background: #0071E3; }
+  .model-unknown .model-dot { background: #8E8E93; }
   .model-pills {
     list-style: none; padding: 0; margin: 5px 0 0;
     display: flex; flex-wrap: wrap; gap: 4px;
@@ -904,7 +903,7 @@
 <body>
 <div id="loading" class="loading">
   <div class="spinner"></div>
-  <div class="loading-text">Reading your OpenAI Codex sessions…</div>
+  <div class="loading-text">Reading sessions…</div>
 </div>
 <div id="app" class="container" style="display:none">
   <!-- Privacy notice -->
@@ -1080,9 +1079,9 @@
           <tr>
             <th class="col-date" data-sort="date">Date</th>
             <th class="col-prompt" data-sort="prompt">What you asked</th>
-            <th class="col-model" data-sort="model"><span class="has-tooltip has-tooltip-below">Model<div class="tooltip">Which AI model was used. OpenAI Codex models have different prices and capabilities.</div></span></th>
+            <th class="col-model" data-sort="model"><span class="has-tooltip has-tooltip-below">Model<div class="tooltip">Which AI model was used. Models have different costs and capabilities based on the provider.</div></span></th>
             <th class="col-nums" data-sort="queries" style="text-align:right"><span class="has-tooltip has-tooltip-below">Prompt Turns<div class="tooltip">Count of your prompt turns in this conversation. Tool activity is tracked separately.</div></span></th>
-            <th class="col-nums sorted" data-sort="total" style="text-align:right"><span class="has-tooltip has-tooltip-below">Total tokens<div class="tooltip">The total number of tokens used in this conversation. Higher means more expensive. Long conversations cost more because Codex re-reads everything each turn.</div></span></th>
+            <th class="col-nums sorted" data-sort="total" style="text-align:right"><span class="has-tooltip has-tooltip-below">Total tokens<div class="tooltip">The total number of tokens used in this conversation. Higher means more expensive. Long conversations cost more because models re-read everything each turn.</div></span></th>
             <th class="col-actions" style="text-align:right">Details</th>
           </tr>
         </thead>
@@ -1166,21 +1165,28 @@ function fmtFull(n) {
   return n.toLocaleString(); 
 }
 function modelClass(m) {
+  if (currentProvider === 'claude-code') return 'model-claude';
+  if (currentProvider === 'antigravity') return 'model-antigravity';
+  if (currentProvider === 'codex') return 'model-gpt';
+  
   const norm = m.toLowerCase();
-  if (norm.includes('5.3')) return 'model-codex-5-3';
-  if (norm.includes('5.2')) return 'model-codex-5-2';
-  if (norm.includes('max')) return 'model-codex-max';
-  if (norm.includes('mini')) return 'model-codex-mini';
+  if (norm.includes('claude')) return 'model-claude';
+  if (norm.includes('antigravity')) return 'model-antigravity';
+  if (norm.includes('gpt')) return 'model-gpt';
   return 'model-unknown';
 }
 function modelShort(m) {
-  const match = m.match(/gpt-(5\.\d)-codex(?:-(max|mini|spark))?/i);
+  if (!m) return 'Unknown';
+  // Handles gpt-X, claude-3-5-sonnet, etc.
+  // First, normalize dash-versions like 3-5 to 3.5
+  let norm = m.replace(/-(?=\d)/g, '.');
+  
+  let match = norm.match(/^([a-z0-9-]+?)(?:-([\d\.]+))?(?:-(mini|max|sonnet|haiku|opus|spark))?(?:-\d+)?$/i);
   if (match) {
-    let base = `GPT-${match[1]}`;
-    if (match[2]) {
-      base += ` ${match[2].charAt(0).toUpperCase() + match[2].slice(1)}`;
-    }
-    return base;
+    let brand = match[1].charAt(0).toUpperCase() + match[1].slice(1);
+    let version = match[2] || '';
+    let modifier = match[3] ? (match[3].charAt(0).toUpperCase() + match[3].slice(1)) : '';
+    return `${brand} ${version} ${modifier}`.trim();
   }
   return m;
 }
@@ -1319,12 +1325,12 @@ function renderStats() {
   const cards = [
     { label: 'Total Usage', value: prefix + fmt(t.totalTokens || 0), sub: `${prefix}${fmt(uncachedInput)} in · ${prefix}${fmt(cacheTotal)} cache · ${prefix}${fmt(reasoning)} rsn · ${prefix}${fmt(t.totalOutputTokens || 0)} out`,
       tip: '<div style="margin-bottom:6px">The absolute total volume of tokens processed.</div><div style="font-size:12px;opacity:0.7"><b>Math:</b> Uncached Input + Cached Input + Reasoning + Output.</div>' },
-    { label: 'Est. Cost', value: costStr, sub: `Based on API Codex prices`,
-      tip: '<div style="margin-bottom:6px">The estimated dollar cost of your local usage.</div><div style="font-size:12px;opacity:0.7"><b>Math:</b> Calculated per message by multiplying tokens by their specific model pricing tier.</div>' },
-    { label: 'Conversations', value: fmtFull(t.totalSessions), sub: `~${fmt(t.avgTokensPerSession)} tokens avg`,
-      tip: '<div style="margin-bottom:6px">A continuous thread with Codex.</div><div style="font-size:12px;opacity:0.7"><b>Context:</b> The high average size proves how much files and history your IDE bundles as the conversation builds up.</div>' },
-    { label: 'Messages Sent', value: fmtFull(t.totalQueries), sub: `~${fmt(avgTokensPerMsg)} tokens per message`,
-      tip: '<div style="margin-bottom:6px">How many times you sent a message to Codex. Each time you press send = 1 turn.</div><div style="font-size:12px;opacity:0.7"><b>Note:</b> Assistant replies and tool runs are not counted here.</div>' },
+    { label: 'Est. Cost', value: costStr, sub: `Based on API prices`,
+      tip: `Total estimated cost for this sessions's tokens.` },
+    { label: 'Avg Context', value: fmt(Math.round(DATA.totals.totalInputTokens / Math.max(1, DATA.sessions.length))), sub: 'Input / Session',
+      tip: `<div style="margin-bottom:6px">A continuous thread with ${providerMeta[currentProvider].name}.</div><div style="font-size:12px;opacity:0.7"><b>Context:</b> The high average size proves how much files and history your IDE bundles as the conversation builds up.</div>` },
+    { label: 'Turns', value: fmt(DATA.totals.totalQueries), sub: 'Total Prompts',
+      tip: `<div style="margin-bottom:6px">How many times you sent a message to ${providerMeta[currentProvider].name}. Each time you press send = 1 turn.</div><div style="font-size:12px;opacity:0.7"><b>Note:</b> Assistant replies and tool runs are not counted here.</div>` },
     { label: 'Reasoning', value: fmt(t.totalReasoningTokens || 0), sub: `Internal AI logic tokens`,
       tip: '<div style="margin-bottom:6px">Invisible "thought process" tokens.</div><div style="font-size:12px;opacity:0.7"><b>Context:</b> Models process complex logic before answering. These hidden tokens cost the exact same as Written output.</div>' },
     { label: 'Cache Hit Rate', value: `${((t.cacheHitRate || 0) * 100).toFixed(0)}%`, sub: `${fmt(t.totalCacheReadTokens || 0)} tokens cached`,
