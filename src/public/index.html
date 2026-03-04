@@ -1322,26 +1322,39 @@ function renderStats() {
   const prefix = isEst ? '~' : '';
   let costStr = prefix + '$' + (t.totalCost || 0).toFixed(2);
   if (t.totalCost === 0 && t.totalTokens === 0) costStr = 'N/A';
+  const isCursor = currentProvider === 'cursor' || t.providerType === 'tracking';
+  const isAntigravity = currentProvider === 'antigravity';
+  
+  const usageLabel = isCursor ? (t.eventLabel || 'Code Events') : (isAntigravity ? 'Est. Token Load' : 'Total Usage');
+  const usageValue = isCursor ? fmtFull(t.totalQueries) : prefix + fmt(t.totalTokens || 0);
+  const usageSub = isCursor ? 'Total Code Hashes' : `${prefix}${fmt(uncachedInput)} in · ${prefix}${fmt(cacheTotal)} cache · ${prefix}${fmt(reasoning)} rsn · ${prefix}${fmt(t.totalOutputTokens || 0)} out`;
+  const usageTip = isCursor ? 'Total number of code generation/edit events tracked in the Cursor database.' : '<div style="margin-bottom:6px">The absolute total volume of tokens processed.</div><div style="font-size:12px;opacity:0.7"><b>Math:</b> Uncached Input + Cached Input + Reasoning + Output.</div>';
+
   const cards = [
-    { label: 'Total Usage', value: prefix + fmt(t.totalTokens || 0), sub: `${prefix}${fmt(uncachedInput)} in · ${prefix}${fmt(cacheTotal)} cache · ${prefix}${fmt(reasoning)} rsn · ${prefix}${fmt(t.totalOutputTokens || 0)} out`,
-      tip: '<div style="margin-bottom:6px">The absolute total volume of tokens processed.</div><div style="font-size:12px;opacity:0.7"><b>Math:</b> Uncached Input + Cached Input + Reasoning + Output.</div>' },
+    { label: usageLabel, value: usageValue, sub: usageSub, tip: usageTip },
     { label: 'Est. Cost', value: costStr, sub: `Based on API prices`,
       tip: `Total estimated cost for this sessions's tokens.` },
-    { label: 'Avg Context', value: fmt(Math.round(DATA.totals.totalInputTokens / Math.max(1, DATA.sessions.length))), sub: 'Input / Session',
-      tip: `<div style="margin-bottom:6px">A continuous thread with ${providerMeta[currentProvider].name}.</div><div style="font-size:12px;opacity:0.7"><b>Context:</b> The high average size proves how much files and history your IDE bundles as the conversation builds up.</div>` },
-    { label: 'Turns', value: fmt(DATA.totals.totalQueries), sub: 'Total Prompts',
-      tip: `<div style="margin-bottom:6px">How many times you sent a message to ${providerMeta[currentProvider].name}. Each time you press send = 1 turn.</div><div style="font-size:12px;opacity:0.7"><b>Note:</b> Assistant replies and tool runs are not counted here.</div>` },
-    { label: 'Reasoning', value: fmt(t.totalReasoningTokens || 0), sub: `Internal AI logic tokens`,
-      tip: '<div style="margin-bottom:6px">Invisible "thought process" tokens.</div><div style="font-size:12px;opacity:0.7"><b>Context:</b> Models process complex logic before answering. These hidden tokens cost the exact same as Written output.</div>' },
-    { label: 'Cache Hit Rate', value: `${((t.cacheHitRate || 0) * 100).toFixed(0)}%`, sub: `${fmt(t.totalCacheReadTokens || 0)} tokens cached`,
-      tip: '<div style="margin-bottom:6px">The percentage of input that was discounted.</div><div style="font-size:12px;opacity:0.7"><b>Context:</b> A hit rate above 80% means most of your payload is identical to the previous message, granting massive savings.</div>' },
+    { label: 'Avg Context', value: isCursor ? 'N/A' : fmt(Math.round(DATA.totals.totalInputTokens / Math.max(1, DATA.sessions.length))), sub: isCursor ? 'Tokens not tracked' : 'Input / Session',
+      tip: isCursor ? 'Cursor does not expose raw token counts in its local database.' : `<div style="margin-bottom:6px">A continuous thread with ${providerMeta[currentProvider].name}.</div><div style="font-size:12px;opacity:0.7"><b>Context:</b> The high average size proves how much files and history your IDE bundles as the conversation builds up.</div>` },
+    { label: isCursor ? 'Sessions' : 'Turns', value: isCursor ? fmtFull(DATA.sessions.length) : fmt(DATA.totals.totalQueries), sub: isCursor ? 'Total Conversations' : 'Total Prompts',
+      tip: isCursor ? 'Total number of unique conversation threads.' : `<div style="margin-bottom:6px">How many times you sent a message to ${providerMeta[currentProvider].name}. Each time you press send = 1 turn.</div><div style="font-size:12px;opacity:0.7"><b>Note:</b> Assistant replies and tool runs are not counted here.</div>` },
+    { label: 'Reasoning', value: isCursor ? '0' : fmt(t.totalReasoningTokens || 0), sub: isCursor ? 'Not applicable' : `Internal AI logic tokens`,
+      tip: '<div style="margin-bottom:6px">Invisible "thought process" tokens.</div><div style="font-size:12px;opacity:0.7"><b>Context:</b> Models process complex logic before answering. These hidden tokens cost the exact same as Written output.</div>',
+      hidden: isCursor },
+    { label: 'Cache Hit Rate', value: isCursor ? '0%' : `${((t.cacheHitRate || 0) * 100).toFixed(0)}%`, sub: isCursor ? 'Not applicable' : `${fmt(t.totalCacheReadTokens || 0)} tokens cached`,
+      tip: '<div style="margin-bottom:6px">The percentage of input that was discounted.</div><div style="font-size:12px;opacity:0.7"><b>Context:</b> A hit rate above 80% means most of your payload is identical to the previous message, granting massive savings.</div>',
+      hidden: isCursor },
     { label: 'Cache Savings', value: '$' + (t.cacheSavings || 0).toFixed(2), sub: `API-equivalent savings`,
-      tip: '<div style="margin-bottom:6px">Money saved by Prompt Caching.</div><div style="font-size:12px;opacity:0.7"><b>Math:</b> Cached Tokens × (Full Input Price - Discounted Cache Price). Without this, your bill would be much higher!</div>' },
+      tip: '<div style="margin-bottom:6px">Money saved by Prompt Caching.</div><div style="font-size:12px;opacity:0.7"><b>Math:</b> Cached Tokens × (Full Input Price - Discounted Cache Price). Without this, your bill would be much higher!</div>',
+      hidden: isCursor },
+    { label: 'Log Density', value: fmtFull(t.logDensity || 0), sub: 'API Call Count',
+      tip: 'Number of Planner requests detected in current daemon logs.',
+      hidden: !isAntigravity },
     { label: 'Projected Monthly', value: '$' + (t.projectedMonthlyCost || 0).toFixed(2), sub: `This month: $${(t.costThisMonth || 0).toFixed(2)}`,
       tip: '<div style="margin-bottom:6px">Estimated standard 30-day pacing.</div><div style="font-size:12px;opacity:0.7"><b>Math:</b> (Cost This Month ÷ Current Active Day) × Total Days in Month.</div>' },
     { label: 'Week-over-week', value: (t.weekOverWeek || 'N/A'), sub: `Cost vs previous 7 days`,
       tip: '<div style="margin-bottom:6px">Trajectory of your token spending.</div><div style="font-size:12px;opacity:0.7"><b>Math:</b> ((Last 7 Days Cost - Prev 7 Days Cost) ÷ Prev 7 Days) × 100.</div>' },
-  ];
+  ].filter(c => !c.hidden);
   const primaryCards = cards.slice(0, 6);
   const secondaryCards = cards.slice(6);
   const visibleCards = statsExpanded ? cards : primaryCards;
@@ -1433,6 +1446,13 @@ function renderDailyChart() {
           beginAtZero: true,
           grid: { color: 'rgba(0,0,0,0.04)', drawBorder: false },
           border: { display: false },
+          title: {
+            display: true,
+            text: (currentProvider === 'cursor' || DATA.totals.providerType === 'tracking') ? 'Events' : 'Tokens',
+            font: { family: '-apple-system, system-ui', size: 10, weight: '500' },
+            color: '#86868B',
+            padding: { bottom: 10 }
+          },
           ticks: {
             font: { family: '-apple-system, system-ui', size: 11 }, color: '#86868B',
             callback: function(value) { return fmt(value); }
